@@ -187,7 +187,7 @@ Alice knows:
 
 **PIC:** Bob operates in Alice's transaction → `/sys/*` not authorized → read blocked
 
-```
+```text
 Bob's credentials: {read: /user/*, write: /user/*, read: /sys/*}
 Alice's transaction: {read: /user/*, write: /user/*}
 
