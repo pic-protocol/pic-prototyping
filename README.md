@@ -206,6 +206,84 @@ Alice exploits Bob’s authority
 
 ---
 
+## PIC for AI Agents and Tool Orchestration (Conceptual)
+
+This section illustrates how the same PIC authority propagation model applies to AI agents and tool-based execution, without changing the architecture or security assumptions.
+
+No new concepts are introduced: only Executors change.
+
+```text
+Alice (Human User)
+  │
+  │  PCA_0 (p_0 = Alice, ops_0)
+  ▼
+AI Agent A
+  │
+  │  PCA_1 ⊆ PCA_0
+  ├──────────────▶ Tool / API
+  │
+  │  PCA_2 ⊆ PCA_1
+  └──────────────▶ AI Agent B
+                     │
+                     │  PCA_3 ⊆ PCA_2
+                     └────────▶ Tool / API
+
+```
+
+### Key Idea
+
+- Alice authorizes an action and receives a PCA
+- Alice passes the same PCA to an AI Agent
+- The AI Agent:
+  - may call other AI agents
+  - may invoke tools (APIs, services, system interfaces)
+- Each hop receives a causally derived PCA
+- Authority only decreases, never expands
+- Origin (p_0) remains Alice throughout
+
+### What is a Tool?
+
+A tool can be any executor that enforces PIC:
+
+- External APIs
+- Internal microservices
+- Other AI agents
+- Databases or storage services
+- Operating system services
+- Cloud services
+- Event processors
+
+If it validates PCA, it is PIC-compliant.
+
+### Why This Matters
+
+Traditional AI-agent systems rely on ambient authority:
+agents execute using their own credentials.
+
+### With PIC
+
+- AI agents never gain independent authority
+- Tools execute only within Alice’s original authority
+- Confused deputy attacks are structurally impossible
+- The same security guarantees apply to:
+  - browsers → services
+  - services → services
+  - humans → AI agents → tools
+
+### Mental Model
+
+> **AI agents** are just executors in a **PIC** transaction graph.
+>
+> If an **API call** is safe under PIC, an **AI agent** calling that API is **equally safe**.
+
+### Governance and Auditing
+
+> PIC implements the **Authority Continuity** principle. 
+> 
+> On top of this, it enables **Governance** and **Auditing** integration at each step of the execution flow.
+
+---
+
 ## Why PIC Works
 
 ```text
