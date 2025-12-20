@@ -206,6 +206,28 @@ Alice exploits Bob’s authority
 
 ---
 
+###  Why PIC Works
+
+```text
+PIC flow:
+
+Authority is bound to PCA
+PCA origin = Alice
+
+Bob’s /sys/* authority
+does NOT exist in Alice’s transaction.
+
+No service can "help" a user
+do something they are not allowed to do.
+```
+
+| Transaction Origin | read /user/* | read /sys/* | write /user/* |
+|--------------------|--------------|-------------|---------------|
+| Bob (service)      | ❌ No        | ✓ Yes       | ❌ No         |
+| Alice (user)       | ✓ Yes        | ❌ No       | ✓ Yes         |
+
+---
+
 ## PIC for AI Agents and Tool Orchestration (Conceptual)
 
 This section illustrates how the same PIC authority propagation model applies to AI agents and tool-based execution, without changing the architecture or security assumptions.
@@ -280,33 +302,7 @@ agents execute using their own credentials.
 
 > PIC implements the **Authority Continuity** principle. 
 > 
-> **Governance** and **Auditing** are integrated at each step of the execution flow as a PIC extension.
-
----
-
-## Why PIC Works
-
-```text
-PIC flow:
-
-Authority is bound to PCA
-PCA origin = Alice
-
-Bob’s /sys/* authority
-does NOT exist in Alice’s transaction.
-
-No service can "help" a user
-do something they are not allowed to do.
-```
-
----
-
-## Summary
-
-| Transaction Origin | read /user/* | read /sys/* | write /user/* |
-|--------------------|--------------|-------------|---------------|
-| Bob (service)      | ❌ No        | ✓ Yes       | ❌ No         |
-| Alice (user)       | ✓ Yes        | ❌ No       | ✓ Yes         |
+> **Governance** and **Auditing** are integrated at each step of the execution flow as a PIC extension on the top of the Continuity enforcement.
 
 ---
 
