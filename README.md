@@ -18,7 +18,7 @@ Its purpose is to explore:
 
 ## PIC Example: Cross-Service Confused Deputy Prevention (OAuth → PCA)
 
-This example mirrors the classic **IAM Confused Deputy** scenario, but shows
+This example mirrors the classic **Cross-Service Confused Deputy** scenario, but shows
 how **PIC eliminates the problem structurally**.
 
 ---
