@@ -1,0 +1,7 @@
+{
+  "crv": "Ed25519",
+  "d": "F_XZnX3i4nNkh86eWsu44OHLYy66AWSAaUWLR423Arg",
+  "kid": "did:web:archive.example#key-1",
+  "kty": "OKP",
+  "x": "3uUNMInWl39gRRySApGSeC76QqxGMPS0ppbbnVojgm0"
+}

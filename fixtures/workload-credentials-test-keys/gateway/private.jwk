@@ -1,0 +1,7 @@
+{
+  "crv": "Ed25519",
+  "d": "OHHjDgIpoMQOyYIwF05Gb2VLGhKwU4JsktXbz1GPGHo",
+  "kid": "did:web:gateway.example#key-1",
+  "kty": "OKP",
+  "x": "4QrLh4hfciWA0cBuYZ4uGcC46Tih26bZsTRf2Hxta9k"
+}

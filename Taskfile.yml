@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  codegen:
+    dir:  ./rust-prototyping
+    cmds:
+          - cargo run -p workload-identity-gen   
+    silent: true
+  run:
+    dir:  ./rust-prototyping
+    cmds:
+          - cargo run -p workload-runner
+    silent: true
+  benchrun:
+    dir:  ./rust-prototyping
+    cmds:
+          -  cargo bench -p workload-runner 
+    silent: true

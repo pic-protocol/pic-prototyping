@@ -1,6 +1,6 @@
 # PIC Prototyping
 
-**Status: Experimental / Prototyping**
+**Status: Experimental / Prototyping**  
 
 This repository contains **experimental examples and reference prototypes**
 for the **Provenance Identity Continuity (PIC) protocol**.
@@ -10,7 +10,7 @@ Its purpose is to explore:
 - PIC execution flows
 - Cross-service authority propagation
 - Integration with OAuth / IdP systems
-- Confused Deputy prevention in real SaaS architectures
+- Confused Deputy prevention in real cloud native architectures
 
 ⚠️ **This repository is NOT the PIC Spec and is NOT normative.**
 
@@ -40,7 +40,7 @@ how **PIC eliminates the problem structurally**.
                ▼
 ┌───────────────────────────────┐
 │        Gateway / Mesh         │
-│   (AuthZ Translation Layer)   │
+│    (PIC Translation Layer)    │
 │                               │
 │ DID:                          │
 │  did:web:gateway.example      │
@@ -54,10 +54,10 @@ how **PIC eliminates the problem structurally**.
                ▼
 ┌───────────────────────────────┐
 │             Bob               │
-│        (SaaS Service)         │
+│       (Archive Service)       │
 │                               │
 │ DID:                          │
-│  did:web:billing.example      │
+│  did:web:archive.example      │
 │                               │
 │ Authority (own transactions): │
 │  {read:/sys/*, write:/sys/*}  │
@@ -103,7 +103,7 @@ Gateway / Service Mesh
   │   p_0 = Alice
   │   ops_0 = {read:/user/*, write:/user/*}
   ▼
-Bob (SaaS Service)
+Bob (Archive Service)
   │ forwards request unchanged
   │ never adds authority
   ▼
