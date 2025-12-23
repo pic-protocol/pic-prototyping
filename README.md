@@ -2,6 +2,15 @@
 
 **Status: Experimental / Prototyping**  
 
+> **Attribution Notice**  
+> This work is based on the **Provenance Identity Continuity (PIC) Model**,  
+> a theoretical framework created by **Nicola Gallo**.  
+>  
+> This repository and all related materials are published and maintained by  
+> **Nitro Agility S.r.l.**  
+>  
+> This repository is **non-normative**. The PIC Specification takes precedence.
+
 This repository contains **experimental examples and reference prototypes**
 for the **Provenance Identity Continuity (PIC) protocol**.
 
@@ -24,7 +33,6 @@ how **PIC eliminates the problem structurally**.
 ---
 
 ## Actors, Roles, and Identities
-
 ```text
 ┌───────────────────────────────┐
 │            Alice              │
@@ -82,8 +90,8 @@ how **PIC eliminates the problem structurally**.
 
 ## Trust Assumptions (Important)
 
-- Alice’s identity and permissions are authenticated by an **IdP (OAuth / OIDC)**
-- Bob’s and Carol’s identities are workload identities (DID, SPIFFE, mTLS, etc.)
+- Alice's identity and permissions are authenticated by an **IdP (OAuth / OIDC)**
+- Bob's and Carol's identities are workload identities (DID, SPIFFE, mTLS, etc.)
 - The **Gateway is trusted only to translate identity → PCA**
 - **Authority enforcement happens exclusively via PCA**
 
@@ -92,7 +100,6 @@ This example focuses on **authorization semantics**, not identity proof mechanic
 ---
 
 ## End-to-End Call Flow
-
 ```text
 Alice
   │ HTTP request + OAuth token
@@ -116,7 +123,6 @@ Result
 ---
 
 ## Carol Storage Logic (Rust, PCA-Enforced)
-
 ```rust
 fn process(pca: &Pca, input_file: &str, content: &str) -> Result<String, Error> {
     let result = if exists(pca, input_file)? && can_read(pca, input_file)? {
@@ -138,8 +144,7 @@ She enforces **only what the PCA allows**.
 
 ---
 
-## Case 1: Bob’s Own Transaction (Legitimate)
-
+## Case 1: Bob's Own Transaction (Legitimate)
 ```text
 Bob starts transaction:
   PCA_0:
@@ -161,7 +166,6 @@ Carol validates:
 ## Case 2: Alice Attempts Confused Deputy Attack (Blocked)
 
 Alice tries to steal system logs via Bob.
-
 ```text
 Alice → Gateway:
   OAuth token (user-scoped)
@@ -191,7 +195,6 @@ Alice receives:
 ---
 
 ## Why Token-Based Systems Fail Here
-
 ```text
 OAuth-only / token-based flow:
 
@@ -201,21 +204,20 @@ Bob reads /sys/*
 Bob returns data to Alice
 
 ❌ Confused Deputy:
-Alice exploits Bob’s authority
+Alice exploits Bob's authority
 ```
 
 ---
 
 ## Why PIC Works
-
 ```text
 PIC flow:
 
 Authority is bound to PCA
 PCA origin = Alice
 
-Bob’s /sys/* authority
-does NOT exist in Alice’s transaction.
+Bob's /sys/* authority
+does NOT exist in Alice's transaction.
 
 No service can "help" a user
 do something they are not allowed to do.
@@ -233,7 +235,6 @@ do something they are not allowed to do.
 This section illustrates how the same PIC authority propagation model applies to AI agents and tool-based execution, without changing the architecture or security assumptions.
 
 No new concepts are introduced: only Executors change.
-
 ```text
 Alice (Human User)
   │
@@ -249,7 +250,6 @@ AI Agent A
                      │
                      │  PCA_3 ⊆ PCA_2
                      └────────▶ Tool / API
-
 ```
 
 ### The key idea
@@ -285,7 +285,7 @@ agents execute using their own credentials.
 ### With PIC
 
 - AI agents never gain independent authority
-- Tools execute only within Alice’s original authority
+- Tools execute only within Alice's original authority
 - Confused deputy attacks are structurally impossible
 - The same security guarantees apply to:
   - browsers → services
@@ -316,7 +316,24 @@ The **PIC Model**, its invariants, and compliance rules are defined
 
 [github.com/pic-protocol/pic-spec](https://github.com/pic-protocol/pic-spec)
 
-The PIC Model was originally created by **Nicola Gallo**.
-This repository is **non-normative**.
+In case of conflict, the PIC Specification always takes precedence.
 
-In case of conflict, the PIC Spec always takes precedence.
+---
+
+## Governance and Contributions
+
+Project process and responsibilities are defined by the following documents:
+
+- **Governance:** `GOVERNANCE.md`
+- **Contributing:** `CONTRIBUTING.md`
+- **Code of Conduct:** `CODE_OF_CONDUCT.md`
+- **Maintainers:** `MAINTAINERS.md`
+- **Security Policy:** `SECURITY.md`
+
+Authorship, attribution requirements, and the normative status of the
+PIC Model, PIC Spec, and PIC Protocol documents are defined **exclusively**
+in the PIC Specification (Appendix B).
+
+In case of conflict, the applicable LICENSE files and the normative text of the
+PIC Specification and any Official PIC Protocol specifications take precedence
+over this README.
