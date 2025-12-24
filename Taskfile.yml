@@ -6,12 +6,22 @@ tasks:
     cmds:
           - cargo run -p workload-identity-gen   
     silent: true
-  run:
+  core-test:
+    dir:  ./rust-prototyping
+    cmds:
+          - cargo test -p core
+    silent: true
+  core-bench:
+    dir:  ./rust-prototyping
+    cmds:
+          -  cargo bench -p core
+    silent: true
+  wk-run:
     dir:  ./rust-prototyping
     cmds:
           - cargo run -p workload-runner
     silent: true
-  bench:
+  wk-bench:
     dir:  ./rust-prototyping
     cmds:
           -  cargo bench -p workload-runner 
