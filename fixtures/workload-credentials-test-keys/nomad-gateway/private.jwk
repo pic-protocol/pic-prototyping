@@ -1,7 +1,0 @@
-{
-  "kid": "did:web:gateway.nomad.example#key-202512",
-  "kty": "OKP",
-  "crv": "Ed25519",
-  "x": "qQrZhAR55Y56_cIRN-x4SMhZfbnDgOxLmnUl1xpPrRg",
-  "d": "ULA6nOZ35YfjOIsKez5-rvl1Bqc92EAndyh9oXFz7iQ"
-}

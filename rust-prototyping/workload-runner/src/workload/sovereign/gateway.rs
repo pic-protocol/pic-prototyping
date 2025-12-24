@@ -9,8 +9,8 @@ pub struct Gateway {
 
 impl Gateway {
     pub fn new(registry: Arc<Registry>) -> Result<Self> {
-        let identity = registry.get("gateway")
-            .ok_or_else(|| anyhow::anyhow!("gateway not found in registry"))?;
+        let identity = registry.get("sovereign-gateway")
+            .ok_or_else(|| anyhow::anyhow!("sovereign-gateway not found in registry"))?;
         Ok(Self { identity, registry })
     }
     

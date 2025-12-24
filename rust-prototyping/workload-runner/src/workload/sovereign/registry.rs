@@ -11,7 +11,12 @@ pub struct Registry {
 impl Registry {
     /// Load all identities into memory once
     pub fn load() -> Result<Self> {
-        let names = ["trustplane", "gateway", "archive", "storage"];
+        let names = [
+            "sovereign-trustplane", 
+            "sovereign-gateway", 
+            "sovereign-archive", 
+            "sovereign-storage"
+        ];
         let mut identities = HashMap::new();
         
         for name in names {

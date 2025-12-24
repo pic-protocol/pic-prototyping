@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use tokio::runtime::Runtime;
 use std::sync::Arc;
-use workload_runner::workload::{
+use workload_runner::workload::sovereign::{
     gateway::Gateway,
     registry::Registry,
     Request, 

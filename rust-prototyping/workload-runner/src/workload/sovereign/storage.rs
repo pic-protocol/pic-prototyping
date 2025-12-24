@@ -8,8 +8,8 @@ pub struct Storage {
 
 impl Storage {
     pub fn new(registry: Arc<Registry>) -> Result<Self> {
-        let identity = registry.get("storage")
-            .ok_or_else(|| anyhow::anyhow!("storage not found in registry"))?;
+        let identity = registry.get("sovereign-storage")
+            .ok_or_else(|| anyhow::anyhow!("sovereign-storage not found in registry"))?;
         Ok(Self { identity })
     }
     

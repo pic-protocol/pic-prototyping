@@ -9,8 +9,8 @@ pub struct Archive {
 
 impl Archive {
     pub fn new(registry: Arc<Registry>) -> Result<Self> {
-        let identity = registry.get("archive")
-            .ok_or_else(|| anyhow::anyhow!("archive not found in registry"))?;
+        let identity = registry.get("sovereign-archive")
+            .ok_or_else(|| anyhow::anyhow!("sovereign-archive not found in registry"))?;
         Ok(Self { identity, registry })
     }
     

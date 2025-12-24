@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Instant;
-use workload_runner::workload::{gateway::Gateway, registry::Registry, Request};
+use workload_runner::workload::sovereign::{gateway::Gateway, registry::Registry, Request};
 
 #[tokio::main]
 async fn main() -> Result<()> {

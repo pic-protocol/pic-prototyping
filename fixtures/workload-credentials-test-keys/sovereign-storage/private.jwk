@@ -2,6 +2,6 @@
   "kid": "did:web:storage.sovereign.example#key-202512",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "7HoQM1e96p99rGyNbhV-l6r4L8ysah05XpJRc8Y4Xjs",
-  "d": "3vya3Ert3D8eL2CXptOpXWph8Ls9jwmafkqgO-tZzHc"
+  "x": "WtGlRZ7Gsrl7J0Ed1sZdBYrdIh6BGivHag--tgOpSlg",
+  "d": "GAkAVzsniY6B0YfASdczFpYFtUzQ22bS96LeLj-nZ50"
 }

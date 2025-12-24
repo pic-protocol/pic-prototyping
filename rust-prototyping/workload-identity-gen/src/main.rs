@@ -8,55 +8,79 @@ use identity_gen::{trustplane_gen, workload_gen, WorkloadIdentityType};
 async fn main() -> Result<()> {
     println!("🔐 Workload Identity Generator\n");
 
-    // Demo federations representing two deployment models:
-    // Each federation owns its domain - PIC is just the protocol, not a platform
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // PIC Identity Model
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //
-    // - "sovereign": Enterprise on-prem with SPIFFE/SPIRE
-    // - "nomad": Cloud-native Kubernetes workloads
-    let federations = [
-        ("sovereign", "sovereign.example", "spiffe"),
-        ("nomad", "nomad.example", "kubernetes"),
-    ];
+    // VC/DID are NOT required. CAT accepts any PoI/PoP: SPIFFE, K8s tokens,
+    // cloud tokens, X.509, or W3C VC.
+    //
+    // DID/VC is interesting for mapping workloads to decentralized AI agent
+    // registries. PCA uses CBOR/COSE for compact binary encoding.
+    //
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Demo: two federations, each owns its domain
+    //
+    // - sovereign.example: Enterprise on-prem (SPIFFE)
+    // - nomad.example: Cloud-native (Kubernetes)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    for (name, domain, identity_system) in federations {
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🌐 Federation: {} ({}) - {}\n", name, domain, identity_system);
+    // Federation: sovereign (on-prem, SPIFFE)
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("🌐 Federation: sovereign\n");
 
-        let trustplane = trustplane_gen(
-            &format!("{}-trustplane", name),
-            &format!("trustplane.{}", domain),
+    let sovereign_tp = trustplane_gen(
+        "sovereign-trustplane",
+        "trustplane.sovereign.example",
+    ).await?;
+
+    println!();
+
+    for workload in ["gateway", "archive", "storage"] {
+        let identity_type = WorkloadIdentityType::Spiffe {
+            spiffe_id: format!("spiffe://sovereign.example/{}", workload),
+        };
+
+        workload_gen(
+            &format!("sovereign-{}", workload),
+            &format!("{}.sovereign.example", workload),
+            identity_type,
+            &sovereign_tp,
         ).await?;
-
         println!();
-
-        for workload in ["gateway", "archive", "storage"] {
-            let workload_name = format!("{}-{}", name, workload);
-            let workload_domain = format!("{}.{}", workload, domain);
-            
-            let identity_type = match identity_system {
-                "spiffe" => WorkloadIdentityType::Spiffe {
-                    spiffe_id: format!("spiffe://{}/{}", domain, workload),
-                },
-                "kubernetes" => WorkloadIdentityType::Kubernetes {
-                    namespace: format!("{}-prod", name),
-                    service_account: format!("{}-sa", workload),
-                },
-                _ => WorkloadIdentityType::Did {
-                    did: format!("did:web:{}", workload_domain),
-                },
-            };
-
-            workload_gen(
-                &workload_name,
-                &workload_domain,
-                identity_type,
-                &trustplane,
-            ).await?;
-            println!();
-        }
     }
 
+    // Federation: nomad (cloud, Kubernetes)
+    // Audit service: external, immutable, compliance-ready
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("✅ All federations generated!");
+    println!("🌐 Federation: nomad\n");
+
+    let nomad_tp = trustplane_gen(
+        "nomad-trustplane",
+        "trustplane.nomad.example",
+    ).await?;
+
+    println!();
+
+    let identity_type = WorkloadIdentityType::Kubernetes {
+        namespace: "compliance".to_string(),
+        service_account: "audit-logger-sa".to_string(),
+    };
+
+    workload_gen(
+        "nomad-audit",
+        "audit.nomad.example",
+        identity_type,
+        &nomad_tp,
+    ).await?;
+
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("✅ Done!");
+    println!();
+    println!("   sovereign: Gateway → Archive → Storage");
+    println!("                                    │");
+    println!("                                    └──→ nomad: Audit");
+    
     Ok(())
 }

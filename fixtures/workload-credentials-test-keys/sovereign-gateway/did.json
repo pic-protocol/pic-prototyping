@@ -18,7 +18,7 @@
         "crv": "Ed25519",
         "kid": "did:web:gateway.sovereign.example#key-202512",
         "kty": "OKP",
-        "x": "-Mzd0Oti4hosEUXYYOhqujTuBzLGgM4G1dEqgxyxop0"
+        "x": "VnHheLtjvbvVTjynPht25wzoLcr91IePhywHcrAY9CQ"
       },
       "type": "Ed25519VerificationKey2020"
     }

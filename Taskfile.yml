@@ -11,7 +11,7 @@ tasks:
     cmds:
           - cargo run -p workload-runner
     silent: true
-  benchrun:
+  bench:
     dir:  ./rust-prototyping
     cmds:
           -  cargo bench -p workload-runner 

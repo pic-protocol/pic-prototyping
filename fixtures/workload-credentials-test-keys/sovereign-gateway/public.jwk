@@ -2,5 +2,5 @@
   "kid": "did:web:gateway.sovereign.example#key-202512",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "-Mzd0Oti4hosEUXYYOhqujTuBzLGgM4G1dEqgxyxop0"
+  "x": "VnHheLtjvbvVTjynPht25wzoLcr91IePhywHcrAY9CQ"
 }

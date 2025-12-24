@@ -1,0 +1,7 @@
+{
+  "kid": "did:web:audit.nomad.example#key-202512",
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "x": "zRb_E5D9vzuJ0_79GAi6RtLcfwWxstYtDvBr8M0o4fc",
+  "d": "DVqso8lnJpsyiIa6S9idcuF60ovqULwPkf8vopmOB-I"
+}
