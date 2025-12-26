@@ -14,7 +14,7 @@ Specification.
 
 Reports of violations should be submitted to:
 
-**[opensource@nitroagility.com](mailto:opensource@nitroagility.com)**
+[opensource@nitroagility.com](opensource@nitroagility.com)
 
 ---
 
@@ -30,29 +30,33 @@ and orientation.
 We pledge to act and interact in ways that contribute to an open, welcoming,
 diverse, inclusive, and healthy community.
 
+---
+
 ## Our Standards
 
 Examples of behavior that contributes to a positive environment for our
 community include:
 
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by our mistakes,
-  and learning from the experience
-* Focusing on what is best not just for us as individuals, but for the
-  overall community
+- Demonstrating empathy and kindness toward other people  
+- Being respectful of differing opinions, viewpoints, and experiences  
+- Giving and gracefully accepting constructive feedback  
+- Accepting responsibility and apologizing to those affected by our mistakes,
+  and learning from the experience  
+- Focusing on what is best not just for us as individuals, but for the
+  overall community  
 
 Examples of unacceptable behavior include:
 
-* The use of sexualized language or imagery, and sexual attention or
-  advances of any kind
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information, such as a physical or email
-  address, without their explicit permission
-* Other conduct which could reasonably be considered inappropriate in a
-  professional setting
+- The use of sexualized language or imagery, and sexual attention or
+  advances of any kind  
+- Trolling, insulting or derogatory comments, and personal or political attacks  
+- Public or private harassment  
+- Publishing others' private information, such as a physical or email
+  address, without their explicit permission  
+- Other conduct which could reasonably be considered inappropriate in a
+  professional setting  
+
+---
 
 ## Enforcement Responsibilities
 
@@ -66,6 +70,8 @@ comments, commits, code, wiki edits, issues, and other contributions that are
 not aligned to this Code of Conduct, and will communicate reasons for moderation
 decisions when appropriate.
 
+---
+
 ## Scope
 
 This Code of Conduct applies within all community spaces, and also applies when
@@ -74,17 +80,21 @@ Examples of representing our community include using an official email address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
+---
+
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the project’s enforcement authority at:
 
-**opensource@nitroagility.com**
+[opensource@nitroagility.com](opensource@nitroagility.com)
 
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
+
+---
 
 ## Enforcement Guidelines
 
@@ -132,21 +142,34 @@ individual, or aggression toward or disparagement of classes of individuals.
 **Consequence**: A permanent ban from any sort of public interaction within
 the community.
 
+---
+
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 2.0, available at
-[https://www.contributor-covenant.org/version/2/0/code_of_conduct.html][v2.0].
+This Code of Conduct is adapted from the Contributor Covenant, version 2.0:
+[https://www.contributor-covenant.org/version/2/0/code_of_conduct.html](https://www.contributor-covenant.org/version/2/0/code_of_conduct.html)
 
-Community Impact Guidelines were inspired by
-[Mozilla's code of conduct enforcement ladder][Mozilla CoC].
+Community Impact Guidelines inspired by:
+[https://github.com/mozilla/diversity](https://github.com/mozilla/diversity)
 
-For answers to common questions about this code of conduct, see the FAQ at
-[https://www.contributor-covenant.org/faq][FAQ]. Translations are available
-at [https://www.contributor-covenant.org/translations][translations].
+FAQ:
+[https://www.contributor-covenant.org/faq](https://www.contributor-covenant.org/faq)
 
-[homepage]: https://www.contributor-covenant.org
-[v2.0]: https://www.contributor-covenant.org/version/2/0/code_of_conduct.html
-[Mozilla CoC]: https://github.com/mozilla/diversity
-[FAQ]: https://www.contributor-covenant.org/faq
-[translations]: https://www.contributor-covenant.org/translations
+Translations:
+[https://www.contributor-covenant.org/translations](https://www.contributor-covenant.org/translations)
+
+---
+
+## Disclaimer
+
+This Code of Conduct governs **community behavior only**.
+
+Nothing in this document creates any legal obligation, liability, or duty of care for:
+
+- Nitro Agility S.r.l.  
+- The PIC Model creator (Nicola Gallo)  
+- Project maintainers or contributors  
+
+For legal terms, licensing, and liability limitations, refer to the repository
+LICENSE file and the PIC Specification:
+[https://github.com/pic-protocol/pic-spec](https://github.com/pic-protocol/pic-spec)

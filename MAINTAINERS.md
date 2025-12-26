@@ -48,3 +48,25 @@ Maintainer roles:
 
 Any attempt to imply otherwise through documentation, repository metadata,
 or project process is invalid.
+
+---
+
+## Disclaimer and Limitation of Liability
+
+Maintainer status is **voluntary and operational only**.
+
+Maintainers:
+
+- have **no obligation** to review, respond, merge, or maintain any contribution
+- have **no obligation** to provide support, updates, or fixes
+- provide **no warranty** of any kind regarding repository contents
+- assume **no personal liability** for repository contents or operations
+
+All maintainer actions are performed **on behalf of Nitro Agility S.r.l.**
+
+Any claims, disputes, or legal actions related to this repository or its
+contents must be directed to **Nitro Agility S.r.l.**, not to individual
+maintainers.
+
+To the maximum extent permitted by applicable law, individual maintainers
+disclaim all personal liability arising from their maintainer activities.
