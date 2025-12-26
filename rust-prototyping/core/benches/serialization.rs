@@ -1,144 +1,181 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use core::{Pca, PcaPayload, Executor, ExecutorId, PrevExecutor, Provenance};
+use criterion::{criterion_group, criterion_main, Criterion};
+use core::{
+    PcaPayload, Executor, ExecutorBinding,
+    Provenance, CatProvenance, ExecutorProvenance, KeyMaterial,
+    Constraints, TemporalConstraints,
+};
 
-fn sample_pca(ops_count: usize) -> Pca {
-    let ops: Vec<String> = (0..ops_count)
-        .map(|i| format!("read:/resource/{}", i))
-        .collect();
+fn sample_pca_0() -> PcaPayload {
+    let binding = ExecutorBinding::new()
+        .with("org", "acme-corp");
 
-    Pca {
-        issuer_id: "https://cat.example.com".into(),
-        issuer_sig: vec![0u8; 64],
-        payload: PcaPayload {
-            p_0: "https://idp.example.com/users/alice".into(),
-            ops,
-            executor: Executor {
-                id: ExecutorId { service: "service-b".into() },
-                public_key: vec![0u8; 32],
-                key_type: "Ed25519".into(),
-            },
-            prev_executor: Some(PrevExecutor {
-                public_key: vec![0u8; 32],
-                key_type: "Ed25519".into(),
+    PcaPayload {
+        hop: "gateway".into(),
+        p_0: "https://idp.example.com/users/alice".into(),
+        ops: vec!["read:/user/*".into(), "write:/user/*".into()],
+        executor: Executor { binding },
+        provenance: None,
+        constraints: Some(Constraints {
+            temporal: Some(TemporalConstraints {
+                iat: Some("2025-12-11T10:00:00Z".into()),
+                exp: Some("2025-12-11T11:00:00Z".into()),
+                nbf: None,
             }),
-            provenance: Provenance {
-                prev: "sha256:abc123def456".into(),
-                hop: 2,
+        }),
+    }
+}
+
+fn sample_pca_n() -> PcaPayload {
+    let binding = ExecutorBinding::new()
+        .with("org", "acme-corp");
+
+    PcaPayload {
+        hop: "storage".into(),
+        p_0: "https://idp.example.com/users/alice".into(),
+        ops: vec!["read:/user/*".into()],
+        executor: Executor { binding },
+        provenance: Some(Provenance {
+            cat: CatProvenance {
+                issuer: "https://cat.acme-corp.com".into(),
+                signature: vec![0u8; 64],
+                key: KeyMaterial {
+                    public_key: vec![0u8; 32],
+                    alg: "EdDSA".into(),
+                },
             },
-        },
-    }
-}
-
-fn bench_serialization(c: &mut Criterion) {
-    let mut group = c.benchmark_group("serialize");
-
-    for ops_count in [1, 5, 10] {
-        let pca = sample_pca(ops_count);
-        
-        group.throughput(Throughput::Elements(1));
-        
-        group.bench_with_input(
-            BenchmarkId::new("cbor", ops_count),
-            &pca,
-            |b, pca| b.iter(|| pca.to_cbor().unwrap()),
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("json", ops_count),
-            &pca,
-            |b, pca| b.iter(|| pca.to_json().unwrap()),
-        );
-    }
-
-    group.finish();
-}
-
-fn bench_deserialization(c: &mut Criterion) {
-    let mut group = c.benchmark_group("deserialize");
-
-    for ops_count in [1, 5, 10] {
-        let pca = sample_pca(ops_count);
-        let cbor = pca.to_cbor().unwrap();
-        let json = pca.to_json().unwrap();
-
-        group.throughput(Throughput::Bytes(cbor.len() as u64));
-
-        group.bench_with_input(
-            BenchmarkId::new("cbor", ops_count),
-            &cbor,
-            |b, cbor| b.iter(|| Pca::from_cbor(cbor).unwrap()),
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("json", ops_count),
-            &json,
-            |b, json| b.iter(|| Pca::from_json(json).unwrap()),
-        );
-    }
-
-    group.finish();
-}
-
-fn bench_roundtrip(c: &mut Criterion) {
-    let mut group = c.benchmark_group("roundtrip");
-
-    for ops_count in [1, 5, 10] {
-        let pca = sample_pca(ops_count);
-
-        group.bench_with_input(
-            BenchmarkId::new("cbor", ops_count),
-            &pca,
-            |b, pca| {
-                b.iter(|| {
-                    let bytes = pca.to_cbor().unwrap();
-                    Pca::from_cbor(&bytes).unwrap()
-                })
+            executor: ExecutorProvenance {
+                issuer: "spiffe://acme-corp/archive".into(),
+                signature: vec![0u8; 64],
+                key: KeyMaterial {
+                    public_key: vec![0u8; 32],
+                    alg: "EdDSA".into(),
+                },
             },
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("json", ops_count),
-            &pca,
-            |b, pca| {
-                b.iter(|| {
-                    let s = pca.to_json().unwrap();
-                    Pca::from_json(&s).unwrap()
-                })
-            },
-        );
+        }),
+        constraints: Some(Constraints {
+            temporal: Some(TemporalConstraints {
+                iat: Some("2025-12-11T10:00:00Z".into()),
+                exp: Some("2025-12-11T10:30:00Z".into()),
+                nbf: None,
+            }),
+        }),
     }
-
-    group.finish();
 }
 
-fn bench_size_comparison(c: &mut Criterion) {
-    println!("\n📊 Size comparison:");
-    println!("─────────────────────────────────────────");
-    
-    for ops_count in [1, 5, 10] {
-        let pca = sample_pca(ops_count);
-        let cbor = pca.to_cbor().unwrap();
-        let json = pca.to_json().unwrap();
-        
-        println!(
-            "ops={:2}: CBOR={:4} bytes, JSON={:4} bytes, savings={:.1}%",
-            ops_count,
-            cbor.len(),
-            json.len(),
-            (1.0 - cbor.len() as f64 / json.len() as f64) * 100.0
-        );
-    }
-    println!("─────────────────────────────────────────\n");
+fn bench_pca(c: &mut Criterion) {
+    let pca_0 = sample_pca_0();
+    let pca_n = sample_pca_n();
+    let cbor_0 = pca_0.to_cbor().unwrap();
+    let cbor_n = pca_n.to_cbor().unwrap();
 
-    // Dummy bench
-    c.bench_function("size/noop", |b| b.iter(|| 1 + 1));
+    println!();
+    println!("PCA Size");
+    println!("--------");
+    println!("PCA_0: {} bytes", cbor_0.len());
+    println!("PCA_n: {} bytes", cbor_n.len());
+    println!();
+
+    c.bench_function("pca_0/serialize", |b| {
+        b.iter(|| pca_0.to_cbor().unwrap())
+    });
+
+    c.bench_function("pca_0/deserialize", |b| {
+        b.iter(|| PcaPayload::from_cbor(&cbor_0).unwrap())
+    });
+
+    c.bench_function("pca_n/serialize", |b| {
+        b.iter(|| pca_n.to_cbor().unwrap())
+    });
+
+    c.bench_function("pca_n/deserialize", |b| {
+        b.iter(|| PcaPayload::from_cbor(&cbor_n).unwrap())
+    });
 }
 
-criterion_group!(
-    benches,
-    bench_size_comparison,
-    bench_serialization,
-    bench_deserialization,
-    bench_roundtrip,
-);
+fn bench_chain(c: &mut Criterion) {
+    c.bench_function("chain/3_hops", |b| {
+        b.iter(|| {
+            // HOP: Gateway
+            let pca_0 = PcaPayload {
+                hop: "gateway".into(),
+                p_0: "https://idp.example.com/users/alice".into(),
+                ops: vec!["read:/user/*".into(), "write:/user/*".into()],
+                executor: Executor {
+                    binding: ExecutorBinding::new()
+                        .with("org", "acme-corp"),
+                },
+                provenance: None,
+                constraints: None,
+            };
+            let b0 = pca_0.to_cbor().unwrap();
+            let r0 = PcaPayload::from_cbor(&b0).unwrap();
+
+            // HOP: Archive
+            let pca_1 = PcaPayload {
+                hop: "archive".into(),
+                p_0: r0.p_0.clone(),
+                ops: vec!["read:/user/*".into()],
+                executor: Executor {
+                    binding: ExecutorBinding::new()
+                        .with("org", "acme-corp"),
+                },
+                provenance: Some(Provenance {
+                    cat: CatProvenance {
+                        issuer: "https://cat.acme-corp.com".into(),
+                        signature: vec![1u8; 64],
+                        key: KeyMaterial {
+                            public_key: vec![1u8; 32],
+                            alg: "EdDSA".into(),
+                        },
+                    },
+                    executor: ExecutorProvenance {
+                        issuer: "spiffe://acme-corp/gateway".into(),
+                        signature: vec![1u8; 64],
+                        key: KeyMaterial {
+                            public_key: vec![1u8; 32],
+                            alg: "EdDSA".into(),
+                        },
+                    },
+                }),
+                constraints: None,
+            };
+            let b1 = pca_1.to_cbor().unwrap();
+            let r1 = PcaPayload::from_cbor(&b1).unwrap();
+
+            // HOP: Storage
+            let pca_2 = PcaPayload {
+                hop: "storage".into(),
+                p_0: r1.p_0.clone(),
+                ops: vec!["read:/user/alice/*".into()],
+                executor: Executor {
+                    binding: ExecutorBinding::new()
+                        .with("org", "acme-corp"),
+                },
+                provenance: Some(Provenance {
+                    cat: CatProvenance {
+                        issuer: "https://cat.acme-corp.com".into(),
+                        signature: vec![2u8; 64],
+                        key: KeyMaterial {
+                            public_key: vec![2u8; 32],
+                            alg: "EdDSA".into(),
+                        },
+                    },
+                    executor: ExecutorProvenance {
+                        issuer: "spiffe://acme-corp/archive".into(),
+                        signature: vec![2u8; 64],
+                        key: KeyMaterial {
+                            public_key: vec![2u8; 32],
+                            alg: "EdDSA".into(),
+                        },
+                    },
+                }),
+                constraints: None,
+            };
+            let b2 = pca_2.to_cbor().unwrap();
+            PcaPayload::from_cbor(&b2).unwrap()
+        })
+    });
+}
+
+criterion_group!(benches, bench_pca, bench_chain);
 criterion_main!(benches);
