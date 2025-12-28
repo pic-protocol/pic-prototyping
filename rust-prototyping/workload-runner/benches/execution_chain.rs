@@ -14,197 +14,148 @@
  * limitations under the License.
  */
 
-//! Hop-level Benchmark
+//! PIC Chain Execution Benchmark
 //!
-//! Measures timing breakdown per hop: VC creation, DID resolution, execution.
+//! Measures timing breakdown per hop: PCA deserialization, PoC creation,
+//! CAT calls, and business logic.
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use tokio::runtime::Runtime;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use workload_runner::workload::sovereign::{
-    gateway::Gateway,
-    registry::Registry,
-    Request,
-    Response,
-};
-
-// ============================================================================
-// Timing Breakdown Structs
-// ============================================================================
-
-/// Timing for a single hop
-#[derive(Debug, Clone, Default)]
-pub struct HopTiming {
-    pub hop_name: String,
-    pub did_resolve: Duration,
-    pub vc_create: Duration,
-    pub vc_verify: Duration,
-    pub pca_create: Duration,
-    pub pca_verify: Duration,
-    pub execution: Duration,
-    pub total: Duration,
-}
-
-/// Timing for the entire chain
-#[derive(Debug, Clone, Default)]
-pub struct ChainTiming {
-    pub hops: Vec<HopTiming>,
-    pub total: Duration,
-}
-
-impl ChainTiming {
-    pub fn print_summary(&self) {
-        println!();
-        println!("Chain Execution Timing");
-        println!("======================");
-        println!();
-        println!(
-            "{:<15} {:>12} {:>12} {:>12} {:>12} {:>12} {:>12}",
-            "HOP", "DID", "VC_CREATE", "VC_VERIFY", "PCA_CREATE", "PCA_VERIFY", "EXEC"
-        );
-        println!("{}", "-".repeat(93));
-
-        for hop in &self.hops {
-            println!(
-                "{:<15} {:>9.2}us {:>9.2}us {:>9.2}us {:>9.2}us {:>9.2}us {:>9.2}us",
-                hop.hop_name,
-                hop.did_resolve.as_nanos() as f64 / 1000.0,
-                hop.vc_create.as_nanos() as f64 / 1000.0,
-                hop.vc_verify.as_nanos() as f64 / 1000.0,
-                hop.pca_create.as_nanos() as f64 / 1000.0,
-                hop.pca_verify.as_nanos() as f64 / 1000.0,
-                hop.execution.as_nanos() as f64 / 1000.0,
-            );
-        }
-
-        println!("{}", "-".repeat(93));
-        println!(
-            "TOTAL: {:.2}us ({:.2}ms)",
-            self.total.as_nanos() as f64 / 1000.0,
-            self.total.as_nanos() as f64 / 1_000_000.0
-        );
-        println!();
-    }
-}
-
-// ============================================================================
-// Instrumented Execution (simulated - adapt to your actual code)
-// ============================================================================
-
-/// Simulates instrumented hop execution with timing breakdown.
-/// Replace with actual instrumented calls to your Gateway/Executor.
-async fn execute_chain_instrumented(
-    gateway: &Gateway,
-    request: Request,
-) -> (Response, ChainTiming) {
-    let chain_start = Instant::now();
-    let mut timing = ChainTiming::default();
-
-    // Hop 0: Gateway
-    let hop_start = Instant::now();
-    let mut hop_timing = HopTiming {
-        hop_name: "gateway".into(),
-        ..Default::default()
-    };
-
-    // DID resolution
-    let t = Instant::now();
-    // gateway.resolve_did().await; // <- your actual call
-    hop_timing.did_resolve = t.elapsed();
-
-    // VC creation
-    let t = Instant::now();
-    // gateway.create_vc().await; // <- your actual call
-    hop_timing.vc_create = t.elapsed();
-
-    // VC verification (at receiver)
-    let t = Instant::now();
-    // gateway.verify_vc().await;
-    hop_timing.vc_verify = t.elapsed();
-
-    // PCA creation
-    let t = Instant::now();
-    // gateway.create_pca().await;
-    hop_timing.pca_create = t.elapsed();
-
-    // PCA verification
-    let t = Instant::now();
-    // gateway.verify_pca().await;
-    hop_timing.pca_verify = t.elapsed();
-
-    // Execution
-    let t = Instant::now();
-    // let response = gateway.execute(request).await;
-    hop_timing.execution = t.elapsed();
-
-    hop_timing.total = hop_start.elapsed();
-    timing.hops.push(hop_timing);
-
-    // Actual execution (non-instrumented for now)
-    let response = gateway.next(request).await.unwrap();
-
-    timing.total = chain_start.elapsed();
-    (response, timing)
-}
-
-// ============================================================================
-// Manual Timing Benchmark (runs once, prints breakdown)
-// ============================================================================
+use tokio::runtime::Runtime;
+use workload_runner::workload::instrumentation::ChainTiming;
+use workload_runner::workload::sovereign::{gateway::Gateway, registry::Registry, Request};
 
 fn print_timing_breakdown() {
     let rt = Runtime::new().unwrap();
     let registry = Arc::new(Registry::load().expect("failed to load registry"));
     let gateway = Gateway::new(registry).expect("failed to create gateway");
 
-    let iterations = 1000;
-
-    // Collect samples
+    let iterations = 100;
     let mut samples: Vec<ChainTiming> = Vec::with_capacity(iterations);
+
+    println!();
+    println!("Collecting {} samples...", iterations);
 
     for _ in 0..iterations {
         let request = Request {
             content: "benchmark".to_string(),
+            pca_bytes: None,
         };
-        let (_, timing) = rt.block_on(execute_chain_instrumented(&gateway, request));
+        let (_, timing) = rt.block_on(gateway.next(request)).unwrap();
         samples.push(timing);
     }
 
-    // Compute averages
-    let avg_total: f64 = samples.iter().map(|t| t.total.as_nanos() as f64).sum::<f64>() / iterations as f64;
+    let avg_total_ns: f64 =
+        samples.iter().map(|t| t.total.as_nanos() as f64).sum::<f64>() / iterations as f64;
+
+    let avg_initial_create_ns: f64 = samples
+        .iter()
+        .map(|t| t.initial_pca_create.as_nanos() as f64)
+        .sum::<f64>()
+        / iterations as f64;
+
+    let avg_initial_sign_ns: f64 = samples
+        .iter()
+        .map(|t| t.initial_pca_sign.as_nanos() as f64)
+        .sum::<f64>()
+        / iterations as f64;
 
     println!();
-    println!("Hop Timing Breakdown ({} iterations)", iterations);
-    println!("=====================================");
+    println!("PIC Chain Benchmark Results ({} iterations)", iterations);
+    println!("=============================================");
     println!();
-    println!("Average total: {:.2}us ({:.2}ms)", avg_total / 1000.0, avg_total / 1_000_000.0);
+    println!(
+        "Average total:        {:>10.2} µs ({:.2} ms)",
+        avg_total_ns / 1000.0,
+        avg_total_ns / 1_000_000.0
+    );
+    println!(
+        "Initial PCA create:   {:>10.2} µs",
+        avg_initial_create_ns / 1000.0
+    );
+    println!(
+        "Initial PCA sign:     {:>10.2} µs",
+        avg_initial_sign_ns / 1000.0
+    );
     println!();
 
-    // Print one sample for detailed breakdown
+    if let Some(first) = samples.first() {
+        for (i, _) in first.hops.iter().enumerate() {
+            let avg_deser: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.pca_deserialize.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let avg_poc_create: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.poc_create.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let avg_poc_ser: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.poc_serialize.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let avg_cat: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.cat_call.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let avg_logic: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.business_logic.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let avg_hop_total: f64 = samples
+                .iter()
+                .filter_map(|t| t.hops.get(i))
+                .map(|h| h.total.as_nanos() as f64)
+                .sum::<f64>()
+                / iterations as f64;
+
+            let hop_name = &first.hops[i].hop_name;
+            println!("Hop {} ({}):", i + 1, hop_name);
+            println!("  PCA deserialize:    {:>10.2} µs", avg_deser / 1000.0);
+            println!("  PoC create:         {:>10.2} µs", avg_poc_create / 1000.0);
+            println!("  PoC serialize:      {:>10.2} µs", avg_poc_ser / 1000.0);
+            println!("  CAT call:           {:>10.2} µs", avg_cat / 1000.0);
+            println!("  Business logic:     {:>10.2} µs", avg_logic / 1000.0);
+            println!("  ─────────────────────────────────");
+            println!("  Hop total:          {:>10.2} µs", avg_hop_total / 1000.0);
+            println!();
+        }
+    }
+
+    println!("Detailed breakdown (first sample):");
     if let Some(sample) = samples.first() {
         sample.print_summary();
     }
 }
 
-// ============================================================================
-// Criterion Benchmarks
-// ============================================================================
-
-/// Benchmark: per-hop timing (criterion)
-fn bench_per_hop(c: &mut Criterion) {
+fn bench_pic_chain(c: &mut Criterion) {
     print_timing_breakdown();
 
     let rt = Runtime::new().unwrap();
     let registry = Arc::new(Registry::load().unwrap());
     let gateway = Gateway::new(registry).unwrap();
 
-    let mut group = c.benchmark_group("hop_timing");
+    let mut group = c.benchmark_group("pic_chain");
 
-    // Full chain
-    group.bench_function("chain/total", |b| {
+    group.bench_function("full_chain", |b| {
         b.iter(|| {
             let request = Request {
                 content: "test".to_string(),
+                pca_bytes: None,
             };
             rt.block_on(async { gateway.next(request).await.unwrap() })
         })
@@ -213,73 +164,33 @@ fn bench_per_hop(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: isolated operations
-fn bench_isolated_ops(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let registry = Arc::new(Registry::load().unwrap());
-
-    let mut group = c.benchmark_group("isolated_ops");
-
-    // DID resolution only
-    group.bench_function("did/resolve", |b| {
-        b.iter(|| {
-            // rt.block_on(registry.resolve_did("did:example:alice"))
-        })
-    });
-
-    // VC creation only
-    group.bench_function("vc/create", |b| {
-        b.iter(|| {
-            // rt.block_on(create_vc(...))
-        })
-    });
-
-    // VC verification only
-    group.bench_function("vc/verify", |b| {
-        b.iter(|| {
-            // rt.block_on(verify_vc(...))
-        })
-    });
-
-    // PCA creation only (COSE sign)
-    group.bench_function("pca/create", |b| {
-        b.iter(|| {
-            // CoseSigned::sign_ed25519(...)
-        })
-    });
-
-    // PCA verification only (COSE verify)
-    group.bench_function("pca/verify", |b| {
-        b.iter(|| {
-            // signed_pca.verify_ed25519(...)
-        })
-    });
-
-    group.finish();
-}
-
-/// Benchmark: chain depth scaling
-fn bench_chain_depth(c: &mut Criterion) {
+fn bench_chain_scaling(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let registry = Arc::new(Registry::load().unwrap());
     let gateway = Gateway::new(registry).unwrap();
 
-    let mut group = c.benchmark_group("chain_depth");
+    let mut group = c.benchmark_group("chain_scaling");
 
-    // Measure how time scales with hop count
-    for hops in [1, 2, 3, 4, 5] {
-        group.bench_with_input(BenchmarkId::new("hops", hops), &hops, |b, &_hops| {
-            b.iter(|| {
-                let request = Request {
-                    content: "test".to_string(),
-                };
-                rt.block_on(async { gateway.next(request).await.unwrap() })
-            })
-        });
+    for iterations in [1, 5, 10] {
+        group.bench_with_input(
+            BenchmarkId::new("iterations", iterations),
+            &iterations,
+            |b, &iters| {
+                b.iter(|| {
+                    for _ in 0..iters {
+                        let request = Request {
+                            content: "test".to_string(),
+                            pca_bytes: None,
+                        };
+                        rt.block_on(async { gateway.next(request.clone()).await.unwrap() });
+                    }
+                })
+            },
+        );
     }
 
     group.finish();
 }
 
-criterion_group!(benches, bench_per_hop, bench_isolated_ops, bench_chain_depth);
+criterion_group!(benches, bench_pic_chain, bench_chain_scaling);
 criterion_main!(benches);

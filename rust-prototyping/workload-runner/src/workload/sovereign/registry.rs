@@ -17,35 +17,48 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use super::cat::MockCat;
 use super::WorkloadIdentity;
 
 /// Pre-loaded identities registry (in-memory)
 pub struct Registry {
     identities: HashMap<String, Arc<WorkloadIdentity>>,
+    cat: Arc<MockCat>,
 }
 
 impl Registry {
     /// Load all identities into memory once
     pub fn load() -> Result<Self> {
+        // Only load executor workloads (not trustplane which is the issuer)
         let names = [
-            "sovereign-trustplane", 
-            "sovereign-gateway", 
-            "sovereign-archive", 
-            "sovereign-storage"
+            "sovereign-gateway",
+            "sovereign-archive",
+            "sovereign-storage",
         ];
         let mut identities = HashMap::new();
-        
+
         for name in names {
             let identity = WorkloadIdentity::load(name)?;
             identities.insert(name.to_string(), Arc::new(identity));
         }
-        
-        println!("📂 Registry: loaded {} identities into memory", identities.len());
-        
-        Ok(Self { identities })
+
+        println!(
+            "📂 Registry: loaded {} identities into memory",
+            identities.len()
+        );
+
+        let cat = Arc::new(MockCat::new());
+        println!("🔐 CAT: initialized with kid {}", cat.kid());
+
+        Ok(Self { identities, cat })
     }
-    
+
     pub fn get(&self, name: &str) -> Option<Arc<WorkloadIdentity>> {
         self.identities.get(name).cloned()
+    }
+
+    pub fn cat(&self) -> Arc<MockCat> {
+        self.cat.clone()
     }
 }

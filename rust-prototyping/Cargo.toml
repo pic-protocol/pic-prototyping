@@ -31,13 +31,15 @@ anyhow = "1"
 ssi = { version = "0.12", features = ["ed25519", "w3c"] }
 
 # PIC
-pic-protocol = { version = "0.1.3", features = ["full"] }
+pic-protocol = { version = "0.1.4", features = ["full"] }
 
 # Utilities
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 iref = "3"
 static-iref = "3"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
 
 # Benchmark
 criterion = { version = "0.5", features = ["html_reports"] }

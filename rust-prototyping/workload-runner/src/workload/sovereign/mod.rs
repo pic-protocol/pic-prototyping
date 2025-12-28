@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-pub mod gateway;
 pub mod archive;
-pub mod storage;
+pub mod cat;
+pub mod gateway;
 pub mod registry;
+pub mod storage;
 
 use anyhow::{Context, Result};
 use std::fs;
@@ -37,33 +38,58 @@ pub fn fixtures_dir() -> PathBuf {
 pub struct WorkloadIdentity {
     pub name: String,
     pub did: String,
+    pub kid: String,
     pub issuer: String,
     pub role: String,
     pub did_doc: serde_json::Value,
     pub vc: serde_json::Value,
+    pub vp: serde_json::Value,
+    pub vp_bytes: Vec<u8>,
 }
 
 impl WorkloadIdentity {
     pub fn load(name: &str) -> Result<Self> {
         let path = fixtures_dir().join(name);
-        
+
         let did_doc: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(path.join("did.json"))
-                .with_context(|| format!("Failed to read did.json for {}", name))?
+                .with_context(|| format!("Failed to read did.json for {}", name))?,
         )?;
-        
+
         let vc: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(path.join("credential.vc.json"))
-                .with_context(|| format!("Failed to read credential.vc.json for {}", name))?
+                .with_context(|| format!("Failed to read credential.vc.json for {}", name))?,
         )?;
+
+        let vp: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(path.join("presentation.vp.json"))
+                .with_context(|| format!("Failed to read presentation.vp.json for {}", name))?,
+        )?;
+
+        // Serialize VP to bytes for use in attestations
+        let vp_bytes = serde_json::to_vec(&vp)?;
+
+        // Extract kid from DID document verification method
+        let kid = did_doc["verificationMethod"]
+            .as_array()
+            .and_then(|methods| methods.first())
+            .and_then(|method| method["id"].as_str())
+            .unwrap_or("")
+            .to_string();
 
         Ok(Self {
             name: name.to_string(),
             did: did_doc["id"].as_str().unwrap_or("").to_string(),
+            kid,
             issuer: vc["issuer"].as_str().unwrap_or("").to_string(),
-            role: vc["credentialSubject"]["role"].as_str().unwrap_or("").to_string(),
+            role: vc["credentialSubject"]["role"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             did_doc,
             vc,
+            vp,
+            vp_bytes,
         })
     }
 
@@ -78,6 +104,8 @@ impl WorkloadIdentity {
 #[derive(Clone)]
 pub struct Request {
     pub content: String,
+    /// PCA bytes received from previous hop (None for origin)
+    pub pca_bytes: Option<Vec<u8>>,
 }
 
 pub struct Response {

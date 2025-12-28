@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
+pub mod instrumentation;
 pub mod sovereign;

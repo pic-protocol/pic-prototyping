@@ -29,19 +29,29 @@ async fn main() -> Result<()> {
     println!("   ⏱️  Load time: {:?}\n", start_load.elapsed());
 
     let gateway = Gateway::new(registry)?;
-    
+
     let request = Request {
         content: "Hello from Alice".to_string(),
+        pca_bytes: None, // Origin - no PCA yet
     };
 
-    let start = Instant::now();
-    let response = gateway.next(request).await?;
-    let elapsed = start.elapsed();
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("🔗 Starting PIC chain execution");
+    println!("   ops: [read:/user/*, write:/user/*]");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!();
 
-    println!("\n✅ Execution chain completed!");
+    let (response, timing) = gateway.next(request).await?;
+
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("✅ Execution chain completed!");
     println!("   Output: {}", response.output_file);
     println!("   Data: {}", response.data);
-    println!("   ⏱️  Execution time: {:?}", elapsed);
-    
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    timing.print_summary();
+
     Ok(())
 }
