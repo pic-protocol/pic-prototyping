@@ -30,6 +30,8 @@ fn print_benchmark_summary(
     total_ms: f64,
     chains: usize,
     hops_per_chain: usize,
+    avg_pca_bytes: usize,
+    avg_poc_bytes: usize,
 ) {
     let per_chain_us = (total_ms * 1000.0) / chains as f64;
     let per_hop_us = per_chain_us / hops_per_chain as f64;
@@ -45,6 +47,10 @@ fn print_benchmark_summary(
     println!("   ⏱️  Total time:        {:.2} ms", total_ms);
     println!("   ⏱️  Per chain:         {:.2} µs", per_chain_us);
     println!("   ⏱️  Per hop:           {:.2} µs", per_hop_us);
+    println!();
+    println!("   📦 Avg PCA size:       {} bytes", avg_pca_bytes);
+    println!("   📦 Avg PoC size:       {} bytes", avg_poc_bytes);
+    println!("   📦 Avg total/hop:      {} bytes", avg_pca_bytes + avg_poc_bytes);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
 }
@@ -109,14 +115,18 @@ fn bench_chain_scaling(c: &mut Criterion) {
 
     group.finish();
 
-    // Manual timing for clear output
+    // Manual timing for clear output with sizes
     println!();
-    println!("📈 Scaling Summary");
-    println!("==================");
+    println!("📈 Scaling Summary (with message sizes)");
+    println!("========================================");
     
     for num_chains in [1, 5, 10, 20] {
         let start = std::time::Instant::now();
         let iterations = 50;
+        
+        let mut total_pca_bytes = 0usize;
+        let mut total_poc_bytes = 0usize;
+        let mut count = 0usize;
         
         for _ in 0..iterations {
             for _ in 0..num_chains {
@@ -124,18 +134,30 @@ fn bench_chain_scaling(c: &mut Criterion) {
                     content: "bench".to_string(),
                     pca_bytes: None,
                 };
-                rt.block_on(async { gateway.next(request).await.unwrap() });
+                let (_, timing) = rt.block_on(async { gateway.next(request).await.unwrap() });
+                
+                // Collect sizes from timing
+                total_pca_bytes += timing.initial_pca_size;
+                for hop in &timing.hops {
+                    total_poc_bytes += hop.poc_size;
+                }
+                count += 1;
             }
         }
         
         let total = start.elapsed();
         let avg_ms = total.as_secs_f64() * 1000.0 / iterations as f64;
         
+        let avg_pca = if count > 0 { total_pca_bytes / count } else { 0 };
+        let avg_poc = if count > 0 { total_poc_bytes / count } else { 0 };
+        
         print_benchmark_summary(
             &format!("{} chain(s) sequential", num_chains),
             avg_ms,
             num_chains,
             hops_per_chain,
+            avg_pca,
+            avg_poc,
         );
     }
 }
