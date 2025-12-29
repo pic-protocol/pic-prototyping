@@ -31,7 +31,7 @@ anyhow = "1"
 ssi = { version = "0.12", features = ["ed25519", "w3c"] }
 
 # PIC
-pic-protocol = { version = "0.1.4", features = ["full"] }
+pic-protocol = { version = "0.1.6", features = ["full"] }
 
 # Utilities
 chrono = "0.4"
