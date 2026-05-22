@@ -4,34 +4,34 @@
     "https://w3id.org/security/suites/ed25519-2020/v1"
   ],
   "assertionMethod": [
-    "did:web:trustplane.sovereign.example#issuer-key-202512",
-    "did:web:trustplane.sovereign.example#cat-key-202512"
+    "did:web:trustplane.sovereign.example#issuer-key-202605",
+    "did:web:trustplane.sovereign.example#cat-key-202605"
   ],
   "authentication": [
-    "did:web:trustplane.sovereign.example#issuer-key-202512",
-    "did:web:trustplane.sovereign.example#cat-key-202512"
+    "did:web:trustplane.sovereign.example#issuer-key-202605",
+    "did:web:trustplane.sovereign.example#cat-key-202605"
   ],
   "id": "did:web:trustplane.sovereign.example",
   "verificationMethod": [
     {
       "controller": "did:web:trustplane.sovereign.example",
-      "id": "did:web:trustplane.sovereign.example#issuer-key-202512",
+      "id": "did:web:trustplane.sovereign.example#issuer-key-202605",
       "publicKeyJwk": {
         "crv": "Ed25519",
-        "kid": "did:web:trustplane.sovereign.example#issuer-key-202512",
+        "kid": "did:web:trustplane.sovereign.example#issuer-key-202605",
         "kty": "OKP",
-        "x": "hwyRnfyB9_BLBLa20npk6uzD0XbNtI2NMAqoJED__LE"
+        "x": "ffHM2dIetz3nfAbrV-kaUvoW4wNTm3ZBhYcl3a1SYck"
       },
       "type": "Ed25519VerificationKey2020"
     },
     {
       "controller": "did:web:trustplane.sovereign.example",
-      "id": "did:web:trustplane.sovereign.example#cat-key-202512",
+      "id": "did:web:trustplane.sovereign.example#cat-key-202605",
       "publicKeyJwk": {
         "crv": "Ed25519",
-        "kid": "did:web:trustplane.sovereign.example#cat-key-202512",
+        "kid": "did:web:trustplane.sovereign.example#cat-key-202605",
         "kty": "OKP",
-        "x": "K9oYgaivMXllXJBqHmf3qzasduI9No1XHH9a3OmHuSo"
+        "x": "2fu0GVoBypI_1Qb89jSf5dROjCrmorhwbL9WsyjfZEk"
       },
       "type": "Ed25519VerificationKey2020"
     }

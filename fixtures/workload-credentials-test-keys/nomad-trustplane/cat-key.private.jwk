@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:trustplane.nomad.example#cat-key-202512",
+  "kid": "did:web:trustplane.nomad.example#cat-key-202605",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "pyvszvfph4FI93t0qn7oWZt2ma4ugsPPm5o0z_IDNQ0",
-  "d": "gV_oqkczW7y0uPg2asqQ9VHkWFoiOWOQAWX86FL2DVs"
+  "x": "6f2u2BO5Pp96MSjtKl9JlLn-8Q8VD7l2phtyz-vdYBA",
+  "d": "4pn854rLSu3Q3atEmH7xxXFW5_AiIuGNVCsjg3WpzJU"
 }

@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:trustplane.sovereign.example#cat-key-202512",
+  "kid": "did:web:trustplane.sovereign.example#cat-key-202605",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "K9oYgaivMXllXJBqHmf3qzasduI9No1XHH9a3OmHuSo",
-  "d": "ceM8B2bmyFBIM5Phmh1oOwpGiszPTdVsk4iw-6iivN8"
+  "x": "2fu0GVoBypI_1Qb89jSf5dROjCrmorhwbL9WsyjfZEk",
+  "d": "wrxhpaBQi31Su4htT8igb5oKz8Ie74sYL0KnxChRgl4"
 }

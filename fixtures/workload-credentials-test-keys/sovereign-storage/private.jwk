@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:storage.sovereign.example#key-202512",
+  "kid": "did:web:storage.sovereign.example#key-202605",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "D3tRdFnKKUqGnN8pwBQibOmAXzl1c7AJZVSVUufO4WQ",
-  "d": "oHDYZqZxNDu0xFccuNXEuYamU0VxzM3FB5da5QcEHBQ"
+  "x": "8Q-bOgkTSdn4MX98HMCRkBEtC94-AzN91Yx5J73ce34",
+  "d": "hMUJDb1Qw9aZX5IotblcqYFtDFy-E3UUEvdWpkXa5rk"
 }
