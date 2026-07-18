@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:archive.sovereign.example#key-202605",
+  "kid": "did:web:archive.sovereign.example#key-202607",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "iNc7R9CTMGZR5wa9kua_D8u-3lUvFjKjiNtuVrI9ukI",
-  "d": "unPPMmteGZbFMNYTyMsoGKrLxJIzh5qVuyG78D8lhGs"
+  "x": "hBGKAhNdZnKCOuMUWlK-uA5ogs5jj6CvsDAfPKAxJ6k",
+  "d": "qe-qqb6aToJRMxpMGTLCXXytXPEOFW6y4LyPphPbdGs"
 }

@@ -4,34 +4,34 @@
     "https://w3id.org/security/suites/ed25519-2020/v1"
   ],
   "assertionMethod": [
-    "did:web:trustplane.nomad.example#issuer-key-202605",
-    "did:web:trustplane.nomad.example#cat-key-202605"
+    "did:web:trustplane.nomad.example#issuer-key-202607",
+    "did:web:trustplane.nomad.example#cat-key-202607"
   ],
   "authentication": [
-    "did:web:trustplane.nomad.example#issuer-key-202605",
-    "did:web:trustplane.nomad.example#cat-key-202605"
+    "did:web:trustplane.nomad.example#issuer-key-202607",
+    "did:web:trustplane.nomad.example#cat-key-202607"
   ],
   "id": "did:web:trustplane.nomad.example",
   "verificationMethod": [
     {
       "controller": "did:web:trustplane.nomad.example",
-      "id": "did:web:trustplane.nomad.example#issuer-key-202605",
+      "id": "did:web:trustplane.nomad.example#issuer-key-202607",
       "publicKeyJwk": {
         "crv": "Ed25519",
-        "kid": "did:web:trustplane.nomad.example#issuer-key-202605",
+        "kid": "did:web:trustplane.nomad.example#issuer-key-202607",
         "kty": "OKP",
-        "x": "VpKwzoQo4N1wM84Be79WvBoHZrGYVxz9tSVd1-1rQro"
+        "x": "16gC4SyBuYWGhyzC_242mTBNIuRJ46dom3fmt07KKU4"
       },
       "type": "Ed25519VerificationKey2020"
     },
     {
       "controller": "did:web:trustplane.nomad.example",
-      "id": "did:web:trustplane.nomad.example#cat-key-202605",
+      "id": "did:web:trustplane.nomad.example#cat-key-202607",
       "publicKeyJwk": {
         "crv": "Ed25519",
-        "kid": "did:web:trustplane.nomad.example#cat-key-202605",
+        "kid": "did:web:trustplane.nomad.example#cat-key-202607",
         "kty": "OKP",
-        "x": "6f2u2BO5Pp96MSjtKl9JlLn-8Q8VD7l2phtyz-vdYBA"
+        "x": "Cy-PUK-hY3-Gw6Anz20FGK9noYpIczA1Woe5KtZZgZA"
       },
       "type": "Ed25519VerificationKey2020"
     }

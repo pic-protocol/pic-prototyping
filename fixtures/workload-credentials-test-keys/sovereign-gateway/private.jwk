@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:gateway.sovereign.example#key-202605",
+  "kid": "did:web:gateway.sovereign.example#key-202607",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "nRKGmYGVxUW94NlR29oweouo6bYSampH_2jNWAMPT1g",
-  "d": "6oJ90pv7V058FF7CsjDGJI6H7Aawxpvn2X6nNhPnSSo"
+  "x": "qvYBgZa0FtVNLGmvdIvOisSju8oitWaaTl-l-c5gLuY",
+  "d": "OC-RvPJNysvGj3VlBk8ozi85FPU9OoX4pfmiEcoz4RA"
 }

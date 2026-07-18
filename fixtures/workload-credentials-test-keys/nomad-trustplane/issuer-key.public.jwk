@@ -1,6 +1,6 @@
 {
-  "kid": "did:web:trustplane.nomad.example#issuer-key-202605",
+  "kid": "did:web:trustplane.nomad.example#issuer-key-202607",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "VpKwzoQo4N1wM84Be79WvBoHZrGYVxz9tSVd1-1rQro"
+  "x": "16gC4SyBuYWGhyzC_242mTBNIuRJ46dom3fmt07KKU4"
 }

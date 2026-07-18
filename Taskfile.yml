@@ -6,34 +6,34 @@ tasks:
   fmt:
     desc: Format the source code using rustfmt
     silent: true
-    dir: ./rust-prototyping
+    dir: ./v0.1/rust-prototyping
     cmds:
       - cargo fmt --all
 
   # Crates
 
   codegen:
-    dir:  ./rust-prototyping
+    dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo run -p workload-identity-gen   
     silent: true
   core-test:
-    dir:  ./rust-prototyping
+    dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo test -p core
     silent: true
   core-bench:
-    dir:  ./rust-prototyping
+    dir:  ./v0.1/rust-prototyping
     cmds:
           -  cargo bench -p core
     silent: true
   wk-run:
-    dir:  ./rust-prototyping
+    dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo run -p workload-runner --release
     silent: true
   wk-bench:
-    dir:  ./rust-prototyping
+    dir:  ./v0.1/rust-prototyping
     cmds:
           -  cargo bench -p workload-runner
     silent: true

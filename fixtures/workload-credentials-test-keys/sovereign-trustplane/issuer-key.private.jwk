@@ -1,7 +1,7 @@
 {
-  "kid": "did:web:trustplane.sovereign.example#issuer-key-202605",
+  "kid": "did:web:trustplane.sovereign.example#issuer-key-202607",
   "kty": "OKP",
   "crv": "Ed25519",
-  "x": "ffHM2dIetz3nfAbrV-kaUvoW4wNTm3ZBhYcl3a1SYck",
-  "d": "5vxJhM5my6gaM9EbhJwtIR_SsrY4p9AmIoMni2dr22o"
+  "x": "hTdg-TgrZPX7gUlVSgejBQVfXFmOdRyQLWRwtLSlyIs",
+  "d": "MKeHImQxCiXVGig5ZPx8FrcxGjsFW7teoG71R2qxmMQ"
 }

@@ -45,3 +45,15 @@ bs58 = "0.5"
 
 # Benchmark
 criterion = { version = "0.5", features = ["html_reports"] }
+
+# --- Dependency patch: core2 -------------------------------------------------
+# The `core2` crate has been fully yanked from crates.io (every published
+# version, 0.0.0 through 0.4.0). Our dependency chain pulls it in transitively:
+#   ssi 0.12 -> ssi-ucan 0.2.1 -> libipld 0.14 -> libipld-core 0.14.0 -> core2 ^0.4
+# core2 is a non-optional dependency of libipld-core (no feature avoids it), and
+# 0.4.0 is the only release in the `^0.4` range, so a fresh resolve fails with
+# "0.4.0 is yanked". We redirect core2 to its upstream git source, whose `main`
+# still declares version 0.4.0 (with the `alloc` feature libipld-core needs).
+# Remove this patch once `ssi` drops the old libipld/ssi-ucan chain.
+[patch.crates-io]
+core2 = { git = "https://github.com/technocreatives/core2", rev = "545e84bcb0f235b12e21351e0c69767958efe2a7" }
