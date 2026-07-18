@@ -62,6 +62,14 @@ go run ./cmd/picdemo why-pic    # Authority Mixing / cross-lineage composition
 go run ./cmd/picdemo confused-deputy
 go run ./cmd/picdemo snapshot
 go run ./cmd/picdemo revocation
+
+# visual, hop-by-hop execution flow (colored ASCII; authority narrowing + a rejected rogue)
+go run ./cmd/picdemo flow
+go run ./cmd/picdemo flow --only-json | jq      # the whole flow as one JSON
+
+# inspect real signed artifacts + a live tamper proof
+go run ./cmd/picdemo dump                        # human-readable
+go run ./cmd/picdemo dump --only-json | jq       # one JSON document
 ```
 
 Or via [Task](https://taskfile.dev) from the repository root:

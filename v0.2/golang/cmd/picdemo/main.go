@@ -13,6 +13,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -36,13 +37,33 @@ func main() {
 	}
 	order := []string{"why-pic", "confused-deputy", "snapshot", "revocation"}
 
+	if which == "dump" || which == "flow" {
+		onlyJSON := false
+		for _, a := range os.Args[2:] {
+			if a == "--only-json" || a == "--json" || a == "-j" {
+				onlyJSON = true
+			}
+		}
+		var derr error
+		if which == "flow" {
+			derr = runFlow(now, onlyJSON)
+		} else {
+			derr = runDump(now, onlyJSON)
+		}
+		if derr != nil {
+			fmt.Fprintln(os.Stderr, "error:", derr)
+			os.Exit(1)
+		}
+		return
+	}
+
 	var run []string
 	if which == "all" {
 		run = order
 	} else if _, ok := steps[which]; ok {
 		run = []string{which}
 	} else {
-		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v or all)\n", which, order)
+		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, flow, dump, or all)\n", which, order)
 		os.Exit(2)
 	}
 	for _, name := range run {
@@ -54,6 +75,122 @@ func main() {
 }
 
 func header(title string) { fmt.Printf("\n=== %s ===\n", title) }
+
+// artifact pairs a real signed object with a one-line explanation of what it is.
+type artifact struct {
+	Explanation string `json:"explanation"`
+	Value       any    `json:"value"`
+}
+
+// dumpOutput is the single valid JSON document emitted by `dump --only-json`,
+// suitable for piping to jq. Every value is produced live on this run.
+type dumpOutput struct {
+	Description string `json:"description"`
+	Artifacts   struct {
+		PCA0     artifact `json:"pca0"`
+		PCA1     artifact `json:"pca1"`
+		Envelope artifact `json:"envelope"`
+	} `json:"artifacts"`
+	Checks struct {
+		PCA0Digest                       string   `json:"pca0Digest"`
+		PreviousPcaHashMatchesPCA0Digest bool     `json:"previousPcaHashMatchesPca0Digest"`
+		VerifyFullChainOK                bool     `json:"verifyFullChainOk"`
+		Authority                        []string `json:"authority"`
+		TamperProof                      struct {
+			Explanation       string `json:"explanation"`
+			EditedSignedField string `json:"editedSignedField"`
+			Rejected          bool   `json:"rejected"`
+			Reason            string `json:"reason"`
+		} `json:"tamperProof"`
+	} `json:"checks"`
+}
+
+// runDump builds real signed artifacts (PCA0, a successor PCA with its Proof of
+// Relationship, and an envelope), verifies them, and runs a live tamper proof:
+// editing one signed field makes verification fail, because the Ed25519 signature
+// really covers the content. Nothing is precomputed. With onlyJSON it emits a
+// single valid JSON document (for jq); otherwise a human-readable report.
+func runDump(now time.Time, onlyJSON bool) error {
+	w, err := scenario.NewWorld()
+	if err != nil {
+		return err
+	}
+	chain, err := w.BuildChain(2, now)
+	if err != nil {
+		return err
+	}
+	pca0, pca1 := chain[0], chain[1]
+	d0, _ := pca0.Digest()
+	env, err := pic.WrapEnvelope(w.Set.Identity("gateway"), pca0, pca1)
+	if err != nil {
+		return err
+	}
+	inv, verifyErr := pic.NewVerifier(w.Set.Registry, nil).VerifyFullChain(chain[:2], now)
+
+	// Live tamper proof: edit one signed operation, re-verify, then restore.
+	saved := pca1.Invariants.Operations
+	pca1.Invariants.Operations = append([]string{"read:/sys/*"}, saved...)
+	tamperErr := pic.NewVerifier(w.Set.Registry, nil).VerifyHop(pca1, pca0, now, false)
+	pca1.Invariants.Operations = saved
+
+	if onlyJSON {
+		var out dumpOutput
+		out.Description = "Real PIC v0.2 signed artifacts (Ed25519 + SHA-256 hash chain), produced live on this run — nothing precomputed."
+		out.Artifacts.PCA0 = artifact{
+			Explanation: "Origin PCA (PCA0): starts the lineage, signed by the origin principal (alice). It carries no Proof of Relationship and no predecessor hash; its invariants are the upper bound of authority for the whole lineage.",
+			Value:       pca0,
+		}
+		out.Artifacts.PCA1 = artifact{
+			Explanation: "Successor PCA: continues exactly one predecessor. proofOfRelationship carries previousPcaHash (= PCA0 digest), the continuation-challenge response, the executor request binding, and the executor's signed attestation; a single Ed25519 signature covers the whole PCA.",
+			Value:       pca1,
+		}
+		out.Artifacts.Envelope = artifact{
+			Explanation: "Handoff envelope: carries [predecessor, current] together, signed by the forwarder. The digests are a convenience; a Verifier recomputes them from the PCA bytes.",
+			Value:       env,
+		}
+		out.Checks.PCA0Digest = d0
+		out.Checks.PreviousPcaHashMatchesPCA0Digest = pca1.ProofOfRelationship.PreviousPcaHash == d0
+		out.Checks.VerifyFullChainOK = verifyErr == nil
+		out.Checks.Authority = inv.Operations
+		out.Checks.TamperProof.Explanation = "Editing one signed field (invariants.operations) and re-verifying: the Ed25519 signature no longer verifies, so the edit is rejected."
+		out.Checks.TamperProof.EditedSignedField = "invariants.operations"
+		out.Checks.TamperProof.Rejected = tamperErr != nil
+		out.Checks.TamperProof.Reason = errString(tamperErr)
+		printJSON(out)
+		return nil
+	}
+
+	header("Inspect real artifacts (dump)")
+	fmt.Println("\n--- PCA0 (origin, signed by alice) ---")
+	printJSON(pca0)
+	fmt.Printf("PCA0 digest (content id): %s\n", d0)
+	fmt.Println("\n--- PCA1 (successor: real PoR, previousPcaHash, executor attestation, single signature) ---")
+	printJSON(pca1)
+	fmt.Printf("PCA1.proofOfRelationship.previousPcaHash == PCA0 digest ? %v\n",
+		pca1.ProofOfRelationship.PreviousPcaHash == d0)
+	fmt.Println("\n--- Envelope [predecessor, current], signed by the forwarder ---")
+	printJSON(env)
+	fmt.Printf("\nVerifyFullChain([PCA0, PCA1]) -> ok=%v, authority=%v\n", verifyErr == nil, inv.Operations)
+	fmt.Printf("after editing one signed operation -> rejected=%v\n", tamperErr != nil)
+	fmt.Printf("reason: %v\n", tamperErr)
+	return nil
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func printJSON(v any) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		fmt.Println("(marshal error:", err, ")")
+		return
+	}
+	fmt.Println(string(b))
+}
 
 // runAuthorityMixing reproduces the "Why PIC" authority-mixing example.
 func runAuthorityMixing(now time.Time) error {

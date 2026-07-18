@@ -41,10 +41,22 @@ tasks:
   # v0.2 — Go prototype (Snapshot Hash Chain profile)
 
   v0-2-go-demo:
-    desc: Run the PIC v0.2 Go demo (confused deputy, snapshot, revocation)
+    desc: Run the PIC v0.2 Go demo (why-pic, confused-deputy, snapshot, revocation; pass one with -- <name>)
     dir:  ./v0.2/golang
     cmds:
           - go run ./cmd/picdemo {{.CLI_ARGS}}
+    silent: true
+  v0-2-go-flow:
+    desc: Show the full execution flow hop by hop (colored ASCII; authority narrowing + rejected rogue)
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/picdemo flow {{.CLI_ARGS}}
+    silent: true
+  v0-2-go-dump:
+    desc: Dump real signed PCAs/envelope as JSON, with a live tamper proof
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/picdemo dump -- --only-json
     silent: true
   v0-2-go-test:
     desc: Run the PIC v0.2 Go unit tests
