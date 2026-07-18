@@ -17,23 +17,50 @@ tasks:
     cmds:
           - cargo run -p workload-identity-gen   
     silent: true
-  core-test:
+  v0-1-core-test:
     dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo test -p core
     silent: true
-  core-bench:
+  v0-1-core-bench:
     dir:  ./v0.1/rust-prototyping
     cmds:
           -  cargo bench -p core
     silent: true
-  wk-run:
+  v0-1-wk-run:
     dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo run -p workload-runner --release
     silent: true
-  wk-bench:
+  v0-1-wk-bench:
     dir:  ./v0.1/rust-prototyping
     cmds:
           -  cargo bench -p workload-runner
+    silent: true
+
+  # v0.2 — Go prototype (Snapshot Hash Chain profile)
+
+  v0-2-go-demo:
+    desc: Run the PIC v0.2 Go demo (confused deputy, snapshot, revocation)
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/picdemo {{.CLI_ARGS}}
+    silent: true
+  v0-2-go-test:
+    desc: Run the PIC v0.2 Go unit tests
+    dir:  ./v0.2/golang
+    cmds:
+          - go test ./...
+    silent: true
+  v0-2-go-bench:
+    desc: Run the PIC v0.2 Go benchmarks
+    dir:  ./v0.2/golang
+    cmds:
+          - go test -run '^$' -bench . -benchmem ./...
+    silent: true
+  v0-2-go-fmt:
+    desc: Format the PIC v0.2 Go source
+    dir:  ./v0.2/golang
+    cmds:
+          - go fmt ./...
     silent: true

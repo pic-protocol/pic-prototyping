@@ -41,12 +41,19 @@ type Continuation struct {
 // executor presents to prove it satisfies the predecessor execution contract
 // (§1.6). Its Proof is the issuer's signature.
 type Attestation struct {
-	Subject    string    `json:"subject"`
+	Subject    string             `json:"subject"`
 	Attributes ContractAttributes `json:"attributes"`
-	IssuedAt   time.Time `json:"issuedAt"`
-	ExpiresAt  time.Time `json:"expiresAt"`
-	Issuer     string    `json:"issuer"`
-	Proof      *Proof    `json:"proof,omitempty"`
+	IssuedAt   time.Time          `json:"issuedAt"`
+	ExpiresAt  time.Time          `json:"expiresAt"`
+	Issuer     string             `json:"issuer"`
+	Proof      *Proof             `json:"proof,omitempty"`
+}
+
+// attestationSigningBytes returns the canonical bytes the issuer signature
+// covers: the attestation without its own proof.
+func attestationSigningBytes(a Attestation) ([]byte, error) {
+	a.Proof = nil
+	return canonicalJSON(a)
 }
 
 // ContractAttributes are the attested attributes checked against an execution

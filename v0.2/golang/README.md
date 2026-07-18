@@ -60,9 +60,10 @@ go run ./cmd/picdemo revocation
 Or via [Task](https://taskfile.dev) from the repository root:
 
 ```bash
-task go-demo        # go run ./cmd/picdemo
-task go-test        # go test ./...
-task go-bench       # go test -bench . -benchmem ./...
+task v0-2-go-demo               # go run ./cmd/picdemo
+task v0-2-go-demo -- snapshot   # pass a scenario to the demo
+task v0-2-go-test               # go test ./...
+task v0-2-go-bench              # go test -bench . -benchmem ./...
 ```
 
 ## Test and benchmark

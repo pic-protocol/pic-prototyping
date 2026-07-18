@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Based on the Provenance Identity Continuity (PIC) Model created by Nicola Gallo.
+// Conforms to the PIC Specification published and maintained by Nitro Agility S.r.l.
+
+package scenario
+
+import (
+	"testing"
+	"time"
+
+	"github.com/pic-protocol/pic-prototyping/v0.2/golang/pic"
+)
+
+func TestCase1LegitAllowed(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, res, err := w.Case1Legit(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Verified || !res.Authorized {
+		t.Fatalf("legitimate system transaction not allowed: %+v", res)
+	}
+}
+
+func TestCase2HonestBlocked(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, res, err := w.Case2Honest(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Verified {
+		t.Fatalf("honest forward should verify: %v", res.VerifyErr)
+	}
+	if res.Authorized {
+		t.Fatal("confused-deputy read was authorized — system data would leak")
+	}
+	if !res.Blocked() {
+		t.Fatal("expected the request to be blocked")
+	}
+}
+
+func TestCase2MaliciousRejected(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, res, err := w.Case2Malicious(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Verified {
+		t.Fatal("expansive injection was accepted — non-expansion not enforced")
+	}
+	if !res.Blocked() {
+		t.Fatal("malicious expansion should be blocked")
+	}
+}
+
+func TestBuildChainVerifies(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain, err := w.BuildChain(10, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pic.NewVerifier(w.Registry, nil).VerifyFullChain(chain, now); err != nil {
+		t.Fatalf("built chain does not verify: %v", err)
+	}
+	if len(chain) != 11 {
+		t.Fatalf("chain length = %d, want 11", len(chain))
+	}
+}
