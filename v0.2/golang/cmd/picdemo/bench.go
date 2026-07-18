@@ -148,8 +148,35 @@ func renderBench(rows []benchRow) {
 		fmt.Printf("  %s snapshot verify is %s than full-chain — the O(hops since snapshot) win (§5.2)\n",
 			paint(cGreen, "▶"), paint("1;32", fmt.Sprintf("%.1f× faster", full/snap)))
 	}
+
+	// Per-hop cost: one executor receives PCA[n], verifies it, and emits PCA[n+1].
+	var verifyNs, proveNs float64
+	for _, r := range rows {
+		switch {
+		case strings.HasPrefix(r.Name, "verify hop"):
+			verifyNs = r.NsPerOp
+		case strings.HasPrefix(r.Name, "prove hop"):
+			proveNs = r.NsPerOp
+		}
+	}
+	if verifyNs > 0 && proveNs > 0 {
+		total := verifyNs + proveNs
+		fmt.Println()
+		fmt.Println("  " + paint(cBold, "per hop") + paint(cDim, "  (incremental profile: receive PCA[n] → verify → emit PCA[n+1])"))
+		fmt.Printf("    %s %s\n", pad("verify received (n)", 22), padLeft(paint(cYellow, fmtDur(dur(verifyNs))), 11))
+		fmt.Printf("    %s %s\n", pad("prove / emit (n+1)", 22), padLeft(paint(cYellow, fmtDur(dur(proveNs))), 11))
+		fmt.Println("    " + paint(cDim, strings.Repeat("─", 34)))
+		fmt.Printf("    %s %s   %s\n",
+			pad(paint(cBold, "total per hop"), 22),
+			padLeft(paint("1;33", fmtDur(dur(total))), 11),
+			paint(cGreen, "~"+commas(int64(1e9/total))+" hops/s"))
+	}
+
 	fmt.Println(paint(cDim, "  (self-timed harness; for the standard tool use `task v0-2-go-bench`)"))
 }
+
+// dur converts a nanosecond count to a time.Duration.
+func dur(ns float64) time.Duration { return time.Duration(int64(ns)) }
 
 // latencyBar draws a bar proportional to latency, colored by speed tier.
 func latencyBar(ns, maxNs float64) string {
