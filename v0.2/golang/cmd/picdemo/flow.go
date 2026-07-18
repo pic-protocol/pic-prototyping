@@ -36,6 +36,7 @@ const (
 	cDim    = "2"
 	cRed    = "31"
 	cGreen  = "32"
+	cYellow = "33"
 	cCyan   = "36"
 	cActor  = "1;36" // bold cyan
 	cReject = "1;31" // bold red

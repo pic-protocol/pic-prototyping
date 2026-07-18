@@ -67,6 +67,10 @@ go run ./cmd/picdemo revocation
 go run ./cmd/picdemo flow
 go run ./cmd/picdemo flow --only-json | jq      # the whole flow as one JSON
 
+# colored benchmark report (latency, throughput, snapshot vs full-chain)
+go run ./cmd/picdemo bench
+go run ./cmd/picdemo bench --only-json | jq
+
 # inspect real signed artifacts + a live tamper proof
 go run ./cmd/picdemo dump                        # human-readable
 go run ./cmd/picdemo dump --only-json | jq       # one JSON document

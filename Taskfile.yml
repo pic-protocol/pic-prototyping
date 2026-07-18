@@ -70,6 +70,12 @@ tasks:
     cmds:
           - go test -run '^$' -bench . -benchmem ./...
     silent: true
+  v0-2-go-benchmark:
+    desc: Pretty colored benchmark report (latency, throughput, snapshot vs full-chain)
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/picdemo bench {{.CLI_ARGS}}
+    silent: true
   v0-2-go-fmt:
     desc: Format the PIC v0.2 Go source
     dir:  ./v0.2/golang

@@ -37,7 +37,8 @@ func main() {
 	}
 	order := []string{"why-pic", "confused-deputy", "snapshot", "revocation"}
 
-	if which == "dump" || which == "flow" {
+	switch which {
+	case "dump", "flow", "bench":
 		onlyJSON := false
 		for _, a := range os.Args[2:] {
 			if a == "--only-json" || a == "--json" || a == "-j" {
@@ -45,9 +46,12 @@ func main() {
 			}
 		}
 		var derr error
-		if which == "flow" {
+		switch which {
+		case "flow":
 			derr = runFlow(now, onlyJSON)
-		} else {
+		case "bench":
+			derr = runBench(now, onlyJSON)
+		default:
 			derr = runDump(now, onlyJSON)
 		}
 		if derr != nil {
@@ -63,7 +67,7 @@ func main() {
 	} else if _, ok := steps[which]; ok {
 		run = []string{which}
 	} else {
-		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, flow, dump, or all)\n", which, order)
+		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, flow, bench, dump, or all)\n", which, order)
 		os.Exit(2)
 	}
 	for _, name := range run {
