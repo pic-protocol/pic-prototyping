@@ -1,0 +1,7 @@
+{
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "kid": "did:web:snapshot.example#key-1",
+  "x": "62X_ZZlxMyG_odzuEkHirDMASHXU5AdN8E7ECssgRpE",
+  "d": "cnVoYekyGtTWasHIvWPouCSwyhdBLDfxLLbhfv28TqQ"
+}

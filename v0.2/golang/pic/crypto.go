@@ -57,10 +57,37 @@ func NewIdentity(id string) (*Identity, error) {
 	}, nil
 }
 
+// LoadIdentity builds an Identity from an existing Ed25519 seed (32 bytes), for
+// loading deterministic identities from fixtures. If verificationMethod is empty
+// it defaults to id + "#key-1".
+func LoadIdentity(id, verificationMethod string, seed []byte) (*Identity, error) {
+	if len(seed) != ed25519.SeedSize {
+		return nil, fmt.Errorf("seed must be %d bytes, got %d", ed25519.SeedSize, len(seed))
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	if verificationMethod == "" {
+		verificationMethod = id + "#key-1"
+	}
+	return &Identity{
+		ID:                 id,
+		VerificationMethod: verificationMethod,
+		Public:             priv.Public().(ed25519.PublicKey),
+		private:            priv,
+	}, nil
+}
+
 // sign produces a detached signature over msg with this identity's private key.
 func (id *Identity) sign(msg []byte) string {
 	return b64.EncodeToString(ed25519.Sign(id.private, msg))
 }
+
+// EncodePublic returns the base64url of the raw 32-byte Ed25519 public key
+// (the JWK "x" parameter).
+func (id *Identity) EncodePublic() string { return b64.EncodeToString(id.Public) }
+
+// Seed returns the base64url of the 32-byte Ed25519 seed (the JWK "d"
+// parameter). For fixtures/testing only.
+func (id *Identity) Seed() string { return b64.EncodeToString(id.private.Seed()) }
 
 // Registry resolves a verification method (or bare issuer id) to a public key.
 // It stands in for a DID resolver / key distribution mechanism, which is out of

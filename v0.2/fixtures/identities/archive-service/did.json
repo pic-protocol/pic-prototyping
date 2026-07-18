@@ -1,0 +1,26 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/suites/ed25519-2020/v1"
+  ],
+  "id": "did:web:archive.example",
+  "verificationMethod": [
+    {
+      "id": "did:web:archive.example#key-1",
+      "type": "Ed25519VerificationKey2020",
+      "controller": "did:web:archive.example",
+      "publicKeyJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": "did:web:archive.example#key-1",
+        "x": "VVJCMcvcKNElqsV_l-D3Ms8X0e2j9foNRr33dSUvTqc"
+      }
+    }
+  ],
+  "assertionMethod": [
+    "did:web:archive.example#key-1"
+  ],
+  "authentication": [
+    "did:web:archive.example#key-1"
+  ]
+}

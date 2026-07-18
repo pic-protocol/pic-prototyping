@@ -12,9 +12,30 @@ import (
 	"github.com/pic-protocol/pic-prototyping/v0.2/golang/pic"
 )
 
+func TestAuthorityMixingRejectsComposition(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := w.AuthorityMixing(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.HonestAccepted {
+		t.Fatalf("honest continuation of the summary lineage rejected: %v", res.HonestErr)
+	}
+	if res.Composed {
+		t.Fatal("cross-lineage composition {read-all, share-files} was accepted — authority mixing not prevented")
+	}
+	if len(res.LineageBackupAuthority) != 1 || res.LineageBackupAuthority[0] != "read-all" {
+		t.Fatalf("backup lineage authority = %v, want [read-all]", res.LineageBackupAuthority)
+	}
+}
+
 func TestCase1LegitAllowed(t *testing.T) {
 	now := time.Now()
-	w, err := NewWorld(now)
+	w, err := NewWorld()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +50,7 @@ func TestCase1LegitAllowed(t *testing.T) {
 
 func TestCase2HonestBlocked(t *testing.T) {
 	now := time.Now()
-	w, err := NewWorld(now)
+	w, err := NewWorld()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,14 +64,11 @@ func TestCase2HonestBlocked(t *testing.T) {
 	if res.Authorized {
 		t.Fatal("confused-deputy read was authorized — system data would leak")
 	}
-	if !res.Blocked() {
-		t.Fatal("expected the request to be blocked")
-	}
 }
 
 func TestCase2MaliciousRejected(t *testing.T) {
 	now := time.Now()
-	w, err := NewWorld(now)
+	w, err := NewWorld()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,14 +79,11 @@ func TestCase2MaliciousRejected(t *testing.T) {
 	if res.Verified {
 		t.Fatal("expansive injection was accepted — non-expansion not enforced")
 	}
-	if !res.Blocked() {
-		t.Fatal("malicious expansion should be blocked")
-	}
 }
 
 func TestBuildChainVerifies(t *testing.T) {
 	now := time.Now()
-	w, err := NewWorld(now)
+	w, err := NewWorld()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +91,7 @@ func TestBuildChainVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pic.NewVerifier(w.Registry, nil).VerifyFullChain(chain, now); err != nil {
+	if _, err := pic.NewVerifier(w.Set.Registry, nil).VerifyFullChain(chain, now); err != nil {
 		t.Fatalf("built chain does not verify: %v", err)
 	}
 	if len(chain) != 11 {

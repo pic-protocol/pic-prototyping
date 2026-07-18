@@ -1,0 +1,7 @@
+{
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "kid": "did:web:org-authority.example#key-1",
+  "x": "--wZN_gQE5AvDwD3pmgtXJef_v1yVt6g9a35iO69wvQ",
+  "d": "6F0gTbM86Jo0wFLJSzQQqG6XLsWPdv688mtSOdLhtys"
+}

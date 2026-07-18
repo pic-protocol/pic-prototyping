@@ -1,0 +1,7 @@
+{
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "kid": "did:web:alice.example#key-1",
+  "x": "eItJ03NlzpvKIy7yKz7OIVj8SK70zMqQZ6y4His-U_s",
+  "d": "2ehwQUe43Y4F7U0QvGywHla4Vw8MKFGz5AewLCLsk8U"
+}

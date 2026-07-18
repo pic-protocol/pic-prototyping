@@ -1,0 +1,17 @@
+{
+  "subject": "did:web:gateway.example",
+  "attributes": {
+    "role": "gateway",
+    "executionModel": "deterministic",
+    "environment": "production",
+    "region": "eu-1"
+  },
+  "issuedAt": "2026-01-01T00:00:00Z",
+  "expiresAt": "2035-01-01T00:00:00Z",
+  "issuer": "did:web:org-authority.example",
+  "proof": {
+    "type": "Ed25519Signature2020",
+    "verificationMethod": "did:web:org-authority.example#key-1",
+    "signature": "jumxZrl0Fx-8vV0HQmeoBlRbZ8QVo1xes_-mvY5nNBRQbEFIbBYGKy3VxaaE9ekPbOHdoqgbNY61T_nNCQhqAw"
+  }
+}

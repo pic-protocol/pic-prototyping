@@ -1,0 +1,7 @@
+{
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "kid": "did:web:storage.example#key-1",
+  "x": "nHXadBzJV3cUlrweJ14w_GxPmh13IhsROywRSkFyHCY",
+  "d": "Twbf3Lo-VpbNH_19BbYjwRqhDLPLQZjkGkX55Zloam0"
+}

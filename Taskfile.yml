@@ -12,7 +12,7 @@ tasks:
 
   # Crates
 
-  codegen:
+  v0-1-codegen:
     dir:  ./v0.1/rust-prototyping
     cmds:
           - cargo run -p workload-identity-gen   
@@ -63,4 +63,10 @@ tasks:
     dir:  ./v0.2/golang
     cmds:
           - go fmt ./...
+    silent: true
+  v0-2-go-fixtures:
+    desc: Regenerate the PIC v0.2 fixtures (DID identities + signed attestations)
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/genfixtures
     silent: true
