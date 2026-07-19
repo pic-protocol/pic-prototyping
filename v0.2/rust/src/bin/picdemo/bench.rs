@@ -245,7 +245,7 @@ fn render_bench(rows: &[BenchRow]) {
         "{}",
         paint(
             C_DIM,
-            "  (self-timed harness; for the standard tool use `task v0-2-rust-bench`)"
+            "  (illustrative visual demo, not rigorous — for real numbers run `task v0-2-rust-bench` (cargo bench))"
         )
     );
 }

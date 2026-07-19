@@ -172,7 +172,7 @@ func renderBench(rows []benchRow) {
 			paint(cGreen, "~"+commas(int64(1e9/total))+" hops/s"))
 	}
 
-	fmt.Println(paint(cDim, "  (self-timed harness; for the standard tool use `task v0-2-go-bench`)"))
+	fmt.Println(paint(cDim, "  (illustrative visual demo, not rigorous — for real numbers run `task v0-2-go-bench` (go test))"))
 }
 
 // dur converts a nanosecond count to a time.Duration.
