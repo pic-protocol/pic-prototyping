@@ -48,6 +48,15 @@ attestations, loaded once into memory (see [Fixtures](#fixtures)).
    demo prints both timings side by side.
 4. **Revocation**: a `LINEAGE-SUFFIX(lineageId, fromCounter)` cutoff rejects a
    hop and everything causally after it, while earlier hops stay valid.
+5. **Execution Guardrail** (`guardrail`, or `--guardrail` on any scenario): the
+   canonical guarded crossing of the PIC Execution Guardrail spec. An AI agent
+   holds the user's Lineage Execution A and its own Lineage Execution B, and
+   proposes the S3 write as one **Multi-Lineage Execution**; the **sandbox**
+   presents the crossing (`forwardingProof`), the **guardrail** validates every
+   PCA, evaluates the fixture policy over the **semantic scopes** through a
+   simulated PDP, and enforces permit or deny, signing the guardrail forwarding
+   envelope (`guardrailProof`). Deny (wrong scopes), invalid-PCA (deny without
+   evaluating policy), bypass, and tamper cases are all shown live.
 
 ## Requirements
 
