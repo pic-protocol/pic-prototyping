@@ -13,9 +13,26 @@ use chrono::{DateTime, Utc};
 use pic::prover::mint_pca0;
 use pic::scenario::World;
 use pic::types::{Invariants, Request};
-use pic::{issue_snapshot, Prover, Verifier};
+use pic::{issue_snapshot, wrap_envelope, Prover, Verifier};
 use serde::Serialize;
 use std::time::{Duration, Instant};
+
+/// Serialized (compact JSON) byte sizes of representative artifacts.
+struct PcaSizes {
+    pca0: usize,
+    successor: usize,
+    envelope: usize,
+}
+
+/// Byte length of the compact JSON serialization of `v`.
+fn json_len<T: Serialize>(v: &T) -> usize {
+    serde_json::to_vec(v).map(|b| b.len()).unwrap_or(0)
+}
+
+/// Renders a byte count as "1,280 B (1.25 KB)".
+fn size_str(n: usize) -> String {
+    format!("{} B ({:.2} KB)", commas(n as i64), n as f64 / 1024.0)
+}
 
 #[derive(Serialize)]
 struct BenchRow {
@@ -49,6 +66,13 @@ pub(crate) fn run_bench(now: DateTime<Utc>, only_json: bool) -> Result<(), Strin
     let through = chain.len() - 1 - 8;
     let snap = issue_snapshot(w.set.identity("snapshot-issuer"), reg, &chain, through, now)?;
     let tail = &chain[through..];
+
+    let env = wrap_envelope(w.set.identity("gateway"), &pca0, &pca1);
+    let sizes = PcaSizes {
+        pca0: json_len(&pca0),
+        successor: json_len(&pca1),
+        envelope: json_len(&env),
+    };
 
     type Case<'a> = (&'a str, Box<dyn Fn() + 'a>);
     let cases: Vec<Case> = vec![
@@ -112,7 +136,7 @@ pub(crate) fn run_bench(now: DateTime<Utc>, only_json: bool) -> Result<(), Strin
         print_json(&rows);
         return Ok(());
     }
-    render_bench(&rows);
+    render_bench(&rows, &sizes);
     Ok(())
 }
 
@@ -134,7 +158,7 @@ fn measure(f: &dyn Fn()) -> (u64, Duration) {
     }
 }
 
-fn render_bench(rows: &[BenchRow]) {
+fn render_bench(rows: &[BenchRow], sizes: &PcaSizes) {
     header("Micro-benchmarks on the real fixtures");
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -240,6 +264,15 @@ fn render_bench(rows: &[BenchRow]) {
             )
         );
     }
+
+    println!();
+    println!(
+        "  {}  PCA0 {} · successor {} · envelope {}",
+        paint(C_BOLD, "serialized size"),
+        paint(C_YELLOW, &size_str(sizes.pca0)),
+        paint(C_YELLOW, &size_str(sizes.successor)),
+        paint(C_YELLOW, &size_str(sizes.envelope)),
+    );
 
     println!(
         "{}",

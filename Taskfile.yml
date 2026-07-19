@@ -64,13 +64,13 @@ tasks:
     cmds:
           - go test ./...
     silent: true
-  v0-2-go-bench:
+  v0-2-go-benchmark:
     desc: Run the PIC v0.2 Go benchmarks
     dir:  ./v0.2/golang
     cmds:
           - go test -run '^$' -bench . -benchmem ./...
     silent: true
-  v0-2-go-benchmark:
+  v0-2-go-bench:
     desc: Pretty colored benchmark report (latency, throughput, snapshot vs full-chain)
     dir:  ./v0.2/golang
     cmds:

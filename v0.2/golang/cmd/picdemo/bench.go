@@ -6,6 +6,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strconv"
@@ -15,6 +16,18 @@ import (
 	"github.com/pic-protocol/pic-prototyping/v0.2/golang/pic"
 	"github.com/pic-protocol/pic-prototyping/v0.2/golang/scenario"
 )
+
+// pcaSizes holds the serialized (compact JSON) byte sizes of representative
+// artifacts, to show the on-the-wire weight of a PCA.
+type pcaSizes struct{ pca0, successor, envelope int }
+
+// jsonLen is the byte length of the compact JSON serialization of v.
+func jsonLen(v any) int { b, _ := json.Marshal(v); return len(b) }
+
+// sizeStr renders a byte count as "1,280 B (1.25 KB)".
+func sizeStr(n int) string {
+	return fmt.Sprintf("%s B (%.2f KB)", commas(int64(n)), float64(n)/1024)
+}
 
 // benchRow is one measured operation.
 type benchRow struct {
@@ -57,6 +70,12 @@ func runBench(now time.Time, onlyJSON bool) error {
 	}
 	tail := chain[through:]
 
+	env, err := pic.WrapEnvelope(w.Set.Identity("gateway"), pca0, pca1)
+	if err != nil {
+		return err
+	}
+	sizes := pcaSizes{pca0: jsonLen(pca0), successor: jsonLen(pca1), envelope: jsonLen(env)}
+
 	cases := []struct {
 		name string
 		fn   func()
@@ -81,7 +100,7 @@ func runBench(now time.Time, onlyJSON bool) error {
 		printJSON(rows)
 		return nil
 	}
-	renderBench(rows)
+	renderBench(rows, sizes)
 	return nil
 }
 
@@ -103,7 +122,7 @@ func measure(fn func()) (int, time.Duration) {
 	}
 }
 
-func renderBench(rows []benchRow) {
+func renderBench(rows []benchRow, sizes pcaSizes) {
 	header("Micro-benchmarks on the real fixtures")
 	fmt.Println(paint(cDim, fmt.Sprintf("%s/%s · %d CPU · %s", runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), runtime.Version())))
 	fmt.Println()
@@ -171,6 +190,13 @@ func renderBench(rows []benchRow) {
 			padLeft(paint("1;33", fmtDur(dur(total))), 11),
 			paint(cGreen, "~"+commas(int64(1e9/total))+" hops/s"))
 	}
+
+	fmt.Println()
+	fmt.Printf("  %s  PCA0 %s · successor %s · envelope %s\n",
+		paint(cBold, "serialized size"),
+		paint(cYellow, sizeStr(sizes.pca0)),
+		paint(cYellow, sizeStr(sizes.successor)),
+		paint(cYellow, sizeStr(sizes.envelope)))
 
 	fmt.Println(paint(cDim, "  (illustrative visual demo, not rigorous — for real numbers run `task v0-2-go-bench` (go test))"))
 }
