@@ -84,6 +84,15 @@ fn main() {
     } else if known.contains(&which.as_str()) {
         vec![known[known.iter().position(|k| *k == which).unwrap()]]
     } else {
+        if looks_like_dump_selector(&which) {
+            let mut args = vec![which.clone()];
+            args.extend(o.selectors.clone());
+            eprintln!(
+                "{which:?} is a dump selector, not a scenario — try:\n  picdemo dump --guardrail {}",
+                args.join(" ")
+            );
+            exit(2);
+        }
         eprintln!("unknown scenario {which:?} (use: {order:?}, guardrail, flow, bench, dump, or all)");
         exit(2);
     };
@@ -106,6 +115,18 @@ fn main() {
 
 pub(crate) fn header(title: &str) {
     println!("\n=== {title} ===");
+}
+
+/// Reports whether `s` names a dump artifact, so the CLI can suggest the dump
+/// command when a selector is passed as a scenario.
+fn looks_like_dump_selector(s: &str) -> bool {
+    let s = s.trim_start_matches('-').to_lowercase();
+    const KEYS: [&str; 13] = [
+        "pca0", "pca1", "hop0", "hop1", "envelope", "policy", "scopes", "mle", "pdp", "trace",
+        "guard", "denytrace", "deny",
+    ];
+    KEYS.iter()
+        .any(|k| s == *k || (s.len() >= 3 && k.starts_with(&s)))
 }
 
 // --- ANSI color helpers (shared with flow.rs / bench.rs / guarded.rs) --------

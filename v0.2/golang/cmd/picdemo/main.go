@@ -97,6 +97,12 @@ func main() {
 	} else if _, ok := steps[which]; ok {
 		run = []string{which}
 	} else {
+		if looksLikeDumpSelector(which) {
+			args := append([]string{which}, o.selectors...)
+			fmt.Fprintf(os.Stderr, "%q is a dump selector, not a scenario — try:\n  picdemo dump --guardrail %s\n",
+				which, strings.Join(args, " "))
+			os.Exit(2)
+		}
 		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, guardrail, flow, bench, dump, or all)\n", which, order)
 		os.Exit(2)
 	}
@@ -300,6 +306,19 @@ func runDump(now time.Time, o opts) error {
 	}
 	fmt.Println(paint(cDim, "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail guard pdp"))
 	return nil
+}
+
+// looksLikeDumpSelector reports whether s names a dump artifact, so the CLI
+// can suggest the dump command when a selector is passed as a scenario.
+func looksLikeDumpSelector(s string) bool {
+	s = strings.ToLower(strings.TrimLeft(s, "-"))
+	for _, k := range []string{"pca0", "pca1", "hop0", "hop1", "envelope", "policy",
+		"scopes", "mle", "pdp", "trace", "guard", "denytrace", "deny"} {
+		if s == k || (len(s) >= 3 && strings.HasPrefix(k, s)) {
+			return true
+		}
+	}
+	return false
 }
 
 func itemKeys(items []dumpItem) []string {
