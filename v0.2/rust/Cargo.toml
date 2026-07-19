@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Based on the Provenance Identity Continuity (PIC) Model created by Nicola Gallo.
+# Conforms to the PIC Specification published and maintained by Nitro Agility S.r.l.
+
+[package]
+name = "pic"
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PIC v0.2 Rust reference prototype (Snapshot Hash Chain profile + native revocation)."
+
+[lib]
+name = "pic"
+path = "src/lib.rs"
+
+[[bin]]
+name = "picdemo"
+path = "src/bin/picdemo/main.rs"
+
+[[bin]]
+name = "genfixtures"
+path = "src/bin/genfixtures.rs"
+
+[[bench]]
+name = "pic_bench"
+harness = false
+
+[dependencies]
+ed25519-dalek = "2"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+rand = "0.8"
+chrono = { version = "0.4", features = ["clock"] }
+
+[dev-dependencies]
+criterion = "0.5"

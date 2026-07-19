@@ -88,3 +88,48 @@ tasks:
     cmds:
           - go run ./cmd/genfixtures
     silent: true
+
+  # v0.2 — Rust prototype (Snapshot Hash Chain profile; shares v0.2/fixtures with Go)
+
+  v0-2-rust-demo:
+    desc: Run the PIC v0.2 Rust demo (why-pic, confused-deputy, snapshot, revocation; pass one with -- <name>)
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run --bin picdemo -- {{.CLI_ARGS}}
+    silent: true
+  v0-2-rust-flow:
+    desc: Show the full execution flow hop by hop (colored ASCII; authority narrowing + rejected rogue)
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run --bin picdemo -- flow {{.CLI_ARGS}}
+    silent: true
+  v0-2-rust-dump:
+    desc: Dump real signed PCAs/envelope as JSON, with a live tamper proof
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run --bin picdemo -- dump --only-json
+    silent: true
+  v0-2-rust-test:
+    desc: Run the PIC v0.2 Rust unit tests
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo test
+    silent: true
+  v0-2-rust-bench:
+    desc: Pretty colored benchmark report (release build, for a fair compare with Go)
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run --release --bin picdemo -- bench
+    silent: true
+  v0-2-rust-fmt:
+    desc: Format the PIC v0.2 Rust source
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo fmt
+    silent: true
+  v0-2-rust-fixtures:
+    desc: Regenerate the PIC v0.2 fixtures (DID identities + signed attestations)
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run --bin genfixtures
+    silent: true
