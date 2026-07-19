@@ -7,6 +7,7 @@
 //! and caches them, so scenarios and benchmarks pay no per-use disk cost.
 
 use crate::crypto::{b64_decode, Identity, Registry};
+use crate::guardrail::{Policy, ScopeBindings};
 use crate::types::Attestation;
 use crate::PicResult;
 use serde::Deserialize;
@@ -16,11 +17,14 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// The loaded, cached fixture cast: a key registry with every identity, the
-/// identities by actor name, and the signed executor attestations by name.
+/// identities by actor name, the signed executor attestations by name, and the
+/// Execution Guardrail fixtures (policy and semantic-scope bindings).
 pub struct Set {
     pub registry: Registry,
     pub identities: HashMap<String, Identity>,
     pub attestations: HashMap<String, Attestation>,
+    pub policy: Policy,
+    pub scopes: ScopeBindings,
 }
 
 impl Set {
@@ -63,6 +67,8 @@ fn load_from(dir: &Path) -> Result<Set, String> {
         registry: Registry::new(),
         identities: HashMap::new(),
         attestations: HashMap::new(),
+        policy: Policy::default(),
+        scopes: ScopeBindings::new(),
     };
 
     let id_root = dir.join("identities");
@@ -101,6 +107,21 @@ fn load_from(dir: &Path) -> Result<Set, String> {
         let key = file_name.trim_end_matches(".json").to_string();
         set.attestations.insert(key, att);
     }
+
+    // Execution Guardrail fixtures: the policy and the scope bindings.
+    let praw = fs::read(dir.join("guardrail").join("policy.json"))
+        .map_err(|e| format!("read guardrail policy: {e}"))?;
+    set.policy =
+        serde_json::from_slice(&praw).map_err(|e| format!("guardrail policy.json: {e}"))?;
+    let sraw = fs::read(dir.join("guardrail").join("scopes.json"))
+        .map_err(|e| format!("read guardrail scopes: {e}"))?;
+    #[derive(Deserialize)]
+    struct ScopesFile {
+        bindings: ScopeBindings,
+    }
+    let sf: ScopesFile =
+        serde_json::from_slice(&sraw).map_err(|e| format!("guardrail scopes.json: {e}"))?;
+    set.scopes = sf.bindings;
     Ok(set)
 }
 

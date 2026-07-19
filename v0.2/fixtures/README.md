@@ -20,6 +20,8 @@ are intentionally committed and MUST NOT be used for anything real.
 identities/<actor>/did.json      # W3C DID document (Ed25519 public key)
 identities/<actor>/private.jwk   # Ed25519 JWK with the private seed (d)
 attestations/<executor>.json     # a signed PIC attestation (issuer: org-authority)
+guardrail/policy.json            # Execution Guardrail policy (spec-shaped, CEL-like condition)
+guardrail/scopes.json            # semantic-scope bindings (grantId / origin issuer -> scopes)
 ```
 
 ## Cast
@@ -34,10 +36,25 @@ attestations/<executor>.json     # a signed PIC attestation (issuer: org-authori
 | `summary-service` | `did:web:summary.example` | executor (agentic) — Lineage 1 |
 | `archive-service` | `did:web:archive.example` | executor (deterministic) |
 | `storage-service` | `did:web:storage.example` | executor (deterministic) |
+| `guardrail` | `did:web:guardrail.example` | Execution Guardrail (signs `guardrailProof`) |
+| `sandbox` | `did:web:sandbox.example` | sandbox / forwarder (signs `forwardingProof`) |
 
 The executor attestations carry `role`, `compliance`, `executionModel`,
 `environment`, and `region`, signed by `org-authority` with a wide fixed
 validity window so they verify regardless of run date.
+
+## Execution Guardrail fixtures
+
+`guardrail/policy.json` mirrors the Execution Guardrail spec's illustrative
+policy: an `effect` and an elementary CEL-like `when` condition over the
+participants' semantic scopes; the decision defaults to deny. The simulated
+PDP in the prototypes evaluates exactly this file.
+
+`guardrail/scopes.json` is the policy-controlled mapping that binds semantic
+scopes to a Lineage Execution through its origin `grantId` (or origin issuer
+DID as a governance fallback). Scopes are origin-bound metadata the executor
+cannot self-assert, and a scope adds no authority — it only informs the
+guardrail policy decision.
 
 ## Determinism and regeneration
 

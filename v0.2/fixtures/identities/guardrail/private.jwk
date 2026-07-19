@@ -1,0 +1,7 @@
+{
+  "kty": "OKP",
+  "crv": "Ed25519",
+  "kid": "did:web:guardrail.example#key-1",
+  "x": "16EEbcUJQG7C7a6FdnnJzSTs6CTdnnquMoNNTibvZ74",
+  "d": "9gl6uuT07pSlgxSbcT0745twnP6z1PPLG-poTDGUpE8"
+}

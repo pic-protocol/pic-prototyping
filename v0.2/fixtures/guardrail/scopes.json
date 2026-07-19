@@ -1,0 +1,21 @@
+{
+  "description": "Policy-controlled mapping binding semantic scopes to a Lineage Execution through its origin grantId (or origin issuer DID as fallback). Execution Guardrail spec §4.2: a scope adds no authority; it only informs the guardrail policy decision, and it is not under the unilateral control of the evaluated executor.",
+  "bindings": {
+    "did:web:alice.example": [
+      "data-protection"
+    ],
+    "did:web:archive.example": [
+      "data-protection"
+    ],
+    "urn:pic:grant:agent-s3-writer": [
+      "data-protection",
+      "ai-compliance"
+    ],
+    "urn:pic:grant:external-sharing": [
+      "external-sharing"
+    ],
+    "urn:pic:grant:user-backup": [
+      "data-protection"
+    ]
+  }
+}

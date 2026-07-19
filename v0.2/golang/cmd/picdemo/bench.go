@@ -38,9 +38,12 @@ type benchRow struct {
 }
 
 // runBench measures the key PIC operations on the real fixtures and prints a
-// colored table (or a JSON array with --only-json). It is a self-contained
-// harness, separate from `go test -bench`, for a readable at-a-glance report.
-func runBench(now time.Time, onlyJSON bool) error {
+// colored table (or a JSON array with --only-json). With --guardrail it also
+// measures the guarded crossing, decomposed into its components (sandbox
+// presentation, PCA validation, PDP evaluation, envelope signing, receiver
+// verification) and end to end. It is a self-contained harness, separate from
+// `go test -bench`, for a readable at-a-glance report.
+func runBench(now time.Time, o opts) error {
 	w, err := scenario.NewWorld()
 	if err != nil {
 		return err
@@ -96,12 +99,180 @@ func runBench(now time.Time, onlyJSON bool) error {
 		rows[i] = benchRow{Name: c.name, Iters: iters, NsPerOp: ns, OpsPerSec: 1e9 / ns}
 	}
 
-	if onlyJSON {
-		printJSON(rows)
+	var grows []benchRow
+	var genvSize int
+	if o.guardrail {
+		grows, genvSize, err = benchGuardrail(w, now)
+		if err != nil {
+			return err
+		}
+	}
+
+	if o.onlyJSON {
+		printJSON(append(rows, grows...))
 		return nil
 	}
 	renderBench(rows, sizes)
+	if o.guardrail {
+		renderGuardBench(grows, genvSize)
+	}
 	return nil
+}
+
+// benchGuardrail measures the guarded crossing on the canonical A+B example:
+// each component alone, then the whole pipeline end to end.
+func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
+	sandbox, guard := w.GuardrailSetup()
+	reg := w.Set.Registry
+	contract := pic.ExecutionContract{}
+	agent := w.Set.Identity("summary-service")
+	agentAtt := w.Set.Attestation("summary-service")
+
+	// Lineage Execution A: alice → agent.
+	pca0A, err := pic.MintPCA0(w.Set.Identity("alice"),
+		pic.Invariants{Operations: []string{"read-all", "backup"}, ExecutionContract: contract},
+		scenario.GrantUserBackup, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	pca1A, err := pic.NewProver(agent, agentAtt).Continue(pca0A,
+		pic.Invariants{Operations: []string{"backup"}, ExecutionContract: contract},
+		pic.Request{Operation: "backup", Target: "/user/dataset", SecurityDomain: "tenant-42"}, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	// Lineage Execution B: the agent's own origin + signed write request.
+	pca0B, err := pic.MintPCA0(agent,
+		pic.Invariants{Operations: []string{"write:s3/backups/*"}, ExecutionContract: contract},
+		scenario.GrantAgentS3Writer, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	pca1B, err := pic.NewProver(agent, agentAtt).Continue(pca0B,
+		pic.Invariants{Operations: []string{"write:s3/backups/*"}, ExecutionContract: contract},
+		pic.Request{Operation: "write", Target: "s3/backups/tenant-42/dataset.tar", SecurityDomain: "tenant-42"}, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	mle := &pic.MultiLineageExecution{
+		Participants: []pic.Participant{
+			{Label: "A", Chain: []*pic.PCA{pca0A, pca1A}},
+			{Label: "B", Chain: []*pic.PCA{pca0B, pca1B}},
+		},
+		Proposing:   "B",
+		Destination: "s3://backups/tenant-42",
+	}
+
+	pres, err := sandbox.Present(mle, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	env, trace, err := guard.Enforce(pres, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	recognized := w.RecognizedGuardrails()
+	pdp := &pic.LocalPDP{Policy: w.Set.Policy}
+	req := *trace.PDPRequest
+
+	cases := []struct {
+		name string
+		fn   func()
+	}{
+		{"sandbox: present (forwardingProof)", func() { _, _ = sandbox.Present(mle, now) }},
+		{"guardrail: validate participants", func() {
+			for _, p := range mle.Participants {
+				_, _ = pic.NewVerifier(reg, nil).VerifyFullChain(p.Chain, now)
+			}
+		}},
+		{"guardrail: PDP evaluate", func() { _ = pdp.Evaluate(req) }},
+		{"guardrail: enforce (3 steps)", func() { _, _, _ = guard.Enforce(pres, now) }},
+		{"receiver: verify envelope", func() { _ = pic.VerifyGuardrailEnvelope(reg, recognized, env, now) }},
+		{"guarded crossing end to end", func() { _, _, _ = sandbox.Cross(mle, now) }},
+	}
+	rows := make([]benchRow, len(cases))
+	for i, c := range cases {
+		iters, per := measure(c.fn)
+		ns := float64(per.Nanoseconds())
+		rows[i] = benchRow{Name: c.name, Iters: iters, NsPerOp: ns, OpsPerSec: 1e9 / ns}
+	}
+	return rows, jsonLen(env), nil
+}
+
+// renderGuardBench prints the guarded-crossing table plus the decomposition of
+// the end-to-end cost into its components.
+func renderGuardBench(rows []benchRow, envSize int) {
+	fmt.Println()
+	fmt.Println("  " + paint(cBold, "guarded crossing (--guardrail)") +
+		paint(cDim, "  sandbox → guardrail (validate → PDP → sign) → receiver"))
+	fmt.Println("  " + paint(cDim, strings.Repeat("─", 74)))
+
+	maxNs := 0.0
+	for _, r := range rows {
+		if r.NsPerOp > maxNs {
+			maxNs = r.NsPerOp
+		}
+	}
+	for _, r := range rows {
+		lat := fmtDur(dur(r.NsPerOp))
+		thr := commas(int64(r.OpsPerSec)) + "/s"
+		fmt.Printf("  %s %s %s %s\n",
+			pad(paint(cCyan, r.Name), 32),
+			padLeft(paint(cYellow, lat), 11),
+			padLeft(paint(cGreen, thr), 14),
+			latencyBar(r.NsPerOp, maxNs))
+	}
+	fmt.Println("  " + paint(cDim, strings.Repeat("─", 74)))
+
+	// Decompose end-to-end into components (envelope signing is derived).
+	get := func(prefix string) float64 {
+		for _, r := range rows {
+			if strings.HasPrefix(r.Name, prefix) {
+				return r.NsPerOp
+			}
+		}
+		return 0
+	}
+	present := get("sandbox: present")
+	validate := get("guardrail: validate")
+	pdp := get("guardrail: PDP")
+	enforce := get("guardrail: enforce")
+	receiver := get("receiver:")
+	total := get("guarded crossing")
+	sign := enforce - validate - pdp
+	if sign < 0 {
+		sign = 0
+	}
+	if total > 0 {
+		fmt.Println()
+		fmt.Println("  " + paint(cBold, "end-to-end decomposition") + paint(cDim, "  (share of one guarded crossing)"))
+		comp := []struct {
+			name string
+			ns   float64
+		}{
+			{"sandbox present + forwardingProof", present},
+			{"guardrail validate PCAs", validate},
+			{"guardrail PDP evaluate", pdp},
+			{"guardrail sign envelope (derived)", sign},
+		}
+		for _, c := range comp {
+			fmt.Printf("    %s %s  %s\n",
+				pad(c.name, 36),
+				padLeft(paint(cYellow, fmtDur(dur(c.ns))), 11),
+				paint(cDim, fmt.Sprintf("%4.1f%%", c.ns/total*100)))
+		}
+		fmt.Println("    " + paint(cDim, strings.Repeat("─", 52)))
+		fmt.Printf("    %s %s   %s\n",
+			pad(paint(cBold, "guarded crossing total"), 36),
+			padLeft(paint("1;33", fmtDur(dur(total))), 11),
+			paint(cGreen, "~"+commas(int64(1e9/total))+" crossings/s"))
+		fmt.Printf("    %s %s  %s\n",
+			pad("receiver verify (next hop)", 36),
+			padLeft(paint(cYellow, fmtDur(dur(receiver))), 11),
+			paint(cDim, "sandbox mode acceptance"))
+	}
+	fmt.Printf("\n  %s  guardrail envelope %s\n",
+		paint(cBold, "serialized size"), paint(cYellow, sizeStr(envSize)))
 }
 
 // measure runs fn until at least ~200ms have elapsed and returns the iteration

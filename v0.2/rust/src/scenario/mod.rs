@@ -9,6 +9,7 @@
 //! multi-hop chains used by the snapshot and revocation demos.
 
 mod authoritymixing;
+pub mod guardrail;
 mod flow;
 
 pub use authoritymixing::MixingResult;

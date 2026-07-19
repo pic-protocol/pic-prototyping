@@ -5,38 +5,68 @@
 
 //! Command picdemo runs the PIC v0.2 Rust prototype scenarios and prints timings.
 //!
-//!   cargo run --bin picdemo -- [why-pic|confused-deputy|snapshot|revocation|flow|dump|bench|all]
+//!   cargo run --bin picdemo -- [why-pic|confused-deputy|snapshot|revocation|guardrail|flow|dump|bench|all] [flags] [dump selectors]
+//!
+//! Flags:
+//!   --guardrail   load the Execution Guardrail fixtures (sandbox + guardrail +
+//!                 simulated PDP) and route each scenario's tip crossing through
+//!                 them; without it, everything behaves exactly as before.
+//!   --only-json   emit a single JSON document (for jq) instead of the report.
+//!
+//! Dump selectors (with `dump`): pca0|hop0, pca1|hop1, envelope, and with
+//! --guardrail also policy, scopes, mle, pdp, trace, guard, denytrace.
 //!
 //! It uses the real v0.2 fixtures loaded once into memory. It is non-normative
 //! demonstration code; the PIC Specification is authoritative.
 
 mod bench;
 mod flow;
+mod guarded;
 
 use chrono::{DateTime, Utc};
+use guarded::{render_receiver, render_tip_guard, run_guardrail, wrap};
 use pic::authority::go_slice;
 use pic::scenario::World;
-use pic::{issue_snapshot, wrap_envelope, Envelope, Pca, Verifier};
+use pic::{issue_snapshot, wrap_envelope, Verifier};
 use serde::Serialize;
+use serde_json::Value;
 use std::io::IsTerminal;
 use std::process::exit;
 use std::time::{Duration, Instant};
 
+/// Run options shared by every command.
+#[derive(Default, Clone)]
+pub(crate) struct Opts {
+    pub guardrail: bool,
+    pub only_json: bool,
+    pub selectors: Vec<String>,
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let which = args.get(1).cloned().unwrap_or_else(|| "all".to_string());
+    let mut o = Opts::default();
+    let mut positional: Vec<String> = Vec::new();
+    for a in std::env::args().skip(1) {
+        match a.as_str() {
+            "--guardrail" | "-g" => o.guardrail = true,
+            "--only-json" | "--json" | "-j" => o.only_json = true,
+            _ => positional.push(a),
+        }
+    }
+    let which = positional
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "all".to_string());
+    o.selectors = positional.get(1..).unwrap_or_default().to_vec();
     let now = Utc::now();
 
     let order = ["why-pic", "confused-deputy", "snapshot", "revocation"];
+    let known = ["why-pic", "confused-deputy", "snapshot", "revocation", "guardrail"];
 
     if which == "dump" || which == "flow" || which == "bench" {
-        let only_json = args[2..]
-            .iter()
-            .any(|a| a == "--only-json" || a == "--json" || a == "-j");
         let res = match which.as_str() {
-            "flow" => flow::run_flow(now, only_json),
-            "bench" => bench::run_bench(now, only_json),
-            _ => run_dump(now, only_json),
+            "flow" => flow::run_flow(now, &o),
+            "bench" => bench::run_bench(now, &o),
+            _ => run_dump(now, &o),
         };
         if let Err(e) = res {
             eprintln!("error: {e}");
@@ -46,26 +76,25 @@ fn main() {
     }
 
     let run: Vec<&str> = if which == "all" {
-        order.to_vec()
-    } else if order.contains(&which.as_str()) {
-        vec![match which.as_str() {
-            "why-pic" => "why-pic",
-            "confused-deputy" => "confused-deputy",
-            "snapshot" => "snapshot",
-            "revocation" => "revocation",
-            _ => unreachable!(),
-        }]
+        let mut v = order.to_vec();
+        if o.guardrail {
+            v.push("guardrail");
+        }
+        v
+    } else if known.contains(&which.as_str()) {
+        vec![known[known.iter().position(|k| *k == which).unwrap()]]
     } else {
-        eprintln!("unknown scenario {which:?} (use: {order:?}, flow, bench, dump, or all)");
+        eprintln!("unknown scenario {which:?} (use: {order:?}, guardrail, flow, bench, dump, or all)");
         exit(2);
     };
 
     for name in run {
         let res = match name {
-            "why-pic" => run_authority_mixing(now),
-            "confused-deputy" => run_confused_deputy(now),
-            "snapshot" => run_snapshot(now),
-            "revocation" => run_revocation(now),
+            "why-pic" => run_authority_mixing(now, &o),
+            "confused-deputy" => run_confused_deputy(now, &o),
+            "snapshot" => run_snapshot(now, &o),
+            "revocation" => run_revocation(now, &o),
+            "guardrail" => run_guardrail(now, &o),
             _ => unreachable!(),
         };
         if let Err(e) = res {
@@ -79,7 +108,7 @@ pub(crate) fn header(title: &str) {
     println!("\n=== {title} ===");
 }
 
-// --- ANSI color helpers (shared with flow.rs / bench.rs) --------------------
+// --- ANSI color helpers (shared with flow.rs / bench.rs / guarded.rs) --------
 
 pub(crate) fn use_color() -> bool {
     std::io::stdout().is_terminal()
@@ -109,7 +138,7 @@ pub(crate) fn print_json<T: Serialize>(v: &T) {
     }
 }
 
-fn verdict(ok: bool, yes: &str, no: &str) -> String {
+pub(crate) fn verdict(ok: bool, yes: &str, no: &str) -> String {
     if ok {
         yes.to_string()
     } else {
@@ -124,51 +153,38 @@ fn reason(e: &Option<String>) -> String {
 // --- dump -------------------------------------------------------------------
 
 #[derive(Serialize)]
-struct Artifact<'a, T: Serialize> {
-    explanation: &'a str,
-    value: &'a T,
-}
-
-#[derive(Serialize)]
-struct DumpArtifacts<'a> {
-    pca0: Artifact<'a, Pca>,
-    pca1: Artifact<'a, Pca>,
-    envelope: Artifact<'a, Envelope>,
-}
-
-#[derive(Serialize)]
-struct TamperProof {
+struct Artifact {
     explanation: String,
-    #[serde(rename = "editedSignedField")]
-    edited_signed_field: String,
-    rejected: bool,
-    reason: String,
+    value: Value,
 }
 
-#[derive(Serialize)]
-struct DumpChecks {
-    #[serde(rename = "pca0Digest")]
-    pca0_digest: String,
-    #[serde(rename = "previousPcaHashMatchesPca0Digest")]
-    previous_pca_hash_matches_pca0_digest: bool,
-    #[serde(rename = "verifyFullChainOk")]
-    verify_full_chain_ok: bool,
-    authority: Vec<String>,
-    #[serde(rename = "tamperProof")]
-    tamper_proof: TamperProof,
+/// One selectable artifact of the dump.
+struct DumpItem {
+    key: &'static str,
+    aliases: &'static [&'static str],
+    title: String,
+    explanation: &'static str,
+    value: Value,
 }
 
-#[derive(Serialize)]
-struct DumpOutput<'a> {
-    description: String,
-    artifacts: DumpArtifacts<'a>,
-    checks: DumpChecks,
+impl DumpItem {
+    fn matches(&self, sel: &str) -> bool {
+        let sel = sel.to_lowercase();
+        sel == self.key
+            || self.aliases.contains(&sel.as_str())
+            || (sel.len() >= 3 && self.key.starts_with(&sel))
+    }
 }
 
-/// Builds real signed artifacts (PCA0, a successor PCA, and an envelope),
-/// verifies them, and runs a live tamper proof: editing one signed field makes
-/// verification fail because the Ed25519 signature really covers the content.
-fn run_dump(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
+fn to_value<T: Serialize>(v: &T) -> Value {
+    serde_json::to_value(v).expect("serialize artifact")
+}
+
+/// Builds real signed artifacts, verifies them, and runs a live tamper proof.
+/// With --guardrail it also runs the guarded crossing and exposes its
+/// artifacts. Selectors filter what is printed: `dump hop1`,
+/// `dump --guardrail guard pdp`.
+fn run_dump(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     let w = World::new()?;
     let chain = w.build_chain(2, now)?;
     let pca0 = chain[0].clone();
@@ -191,50 +207,164 @@ fn run_dump(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
         .verify_hop(&tampered, &pca0, now, false)
         .err();
 
-    if only_json {
-        let out = DumpOutput {
-            description: "Real PIC v0.2 signed artifacts (Ed25519 + SHA-256 hash chain), produced live on this run — nothing precomputed.".to_string(),
-            artifacts: DumpArtifacts {
-                pca0: Artifact {
-                    explanation: "Origin PCA (PCA0): starts the lineage, signed by the origin principal (alice). It carries no Proof of Relationship and no predecessor hash; its invariants are the upper bound of authority for the whole lineage.",
-                    value: &pca0,
-                },
-                pca1: Artifact {
-                    explanation: "Successor PCA: continues exactly one predecessor. proofOfRelationship carries previousPcaHash (= PCA0 digest), the continuation-challenge response, the executor request binding, and the executor's signed attestation; a single Ed25519 signature covers the whole PCA.",
-                    value: &pca1,
-                },
-                envelope: Artifact {
-                    explanation: "Handoff envelope: carries [predecessor, current] together, signed by the forwarder. The digests are a convenience; a Verifier recomputes them from the PCA bytes.",
-                    value: &env,
-                },
+    let mut items = vec![
+        DumpItem {
+            key: "pca0",
+            aliases: &["hop0"],
+            title: "PCA0 (origin, signed by alice)".into(),
+            explanation: "Origin PCA (PCA0): starts the lineage, signed by the origin principal (alice). It carries no Proof of Relationship and no predecessor hash; its invariants are the upper bound of authority for the whole lineage.",
+            value: to_value(&pca0),
+        },
+        DumpItem {
+            key: "pca1",
+            aliases: &["hop1"],
+            title: "PCA1 (successor: real PoR, previousPcaHash, executor attestation, single signature)".into(),
+            explanation: "Successor PCA: continues exactly one predecessor. proofOfRelationship carries previousPcaHash (= PCA0 digest), the continuation-challenge response, the executor request binding, and the executor's signed attestation; a single Ed25519 signature covers the whole PCA.",
+            value: to_value(&pca1),
+        },
+        DumpItem {
+            key: "envelope",
+            aliases: &[],
+            title: "Envelope [predecessor, current], signed by the forwarder".into(),
+            explanation: "Handoff envelope: carries [predecessor, current] together, signed by the forwarder. The digests are a convenience; a Verifier recomputes them from the PCA bytes.",
+            value: to_value(&env),
+        },
+    ];
+
+    let mut guarded_res = None;
+    if o.guardrail {
+        let g = w.guarded(now)?;
+        items.push(DumpItem {
+            key: "policy",
+            aliases: &[],
+            title: "Guardrail policy (fixture, spec-shaped)".into(),
+            explanation: "The configured policy the PDP evaluates: an effect and an elementary CEL-like condition over the participants' semantic scopes. The decision defaults to deny.",
+            value: to_value(&g.policy),
+        });
+        items.push(DumpItem {
+            key: "scopes",
+            aliases: &[],
+            title: "Semantic-scope bindings (policy-controlled mapping)".into(),
+            explanation: "Scopes are bound to a Lineage Execution through its origin grantId (or origin issuer): origin-bound metadata the executor cannot self-assert. A scope adds no authority.",
+            value: to_value(&g.scopes),
+        });
+        items.push(DumpItem {
+            key: "mle",
+            aliases: &[],
+            title: "Multi-Lineage Execution (the runtime carrier)".into(),
+            explanation: "n >= 1 Lineage Executions carried together for one proposed transition. The proposed transition consists exclusively of the concrete signed requests carried by the participants; no authority of its own.",
+            value: to_value(&g.permit.mle),
+        });
+        items.push(DumpItem {
+            key: "pdp",
+            aliases: &[],
+            title: "PDP exchange (request → decision)".into(),
+            explanation: "What the guardrail hands to the (simulated) PDP — participants with scopes and destination — and the decision that comes back. The guardrail enforces it; the PDP is one possible implementation of policy evaluation.",
+            value: serde_json::json!({
+                "request": g.permit.trace.pdp_request,
+                "decision": g.permit.trace.decision,
+            }),
+        });
+        items.push(DumpItem {
+            key: "trace",
+            aliases: &[],
+            title: "Guardrail enforcement trace (validate → evaluate → enforce)".into(),
+            explanation: "What the guardrail did, in enforcement order: PCA validation per participant, the PDP call, and the enforced decision.",
+            value: to_value(&g.permit.trace),
+        });
+        items.push(DumpItem {
+            key: "guard",
+            aliases: &["guardrail", "guard1"],
+            title: "Guardrail forwarding envelope (two proofs, never nested)".into(),
+            explanation: "The permitted crossing travels in this envelope. forwardingProof (sandbox) attributes the presentation; guardrailProof (guardrail DID) attests validation + policy + permit and covers the forwardingProofDigest. Neither replaces the executor signature on any PCA.",
+            value: to_value(&g.permit.envelope),
+        });
+        items.push(DumpItem {
+            key: "denytrace",
+            aliases: &["deny"],
+            title: "Deny trace (A + C, external-sharing)".into(),
+            explanation: "The same pipeline denying: the PDP finds a participant whose scopes satisfy no policy alternative; the guardrail enforces deny and issues no envelope.",
+            value: to_value(&g.deny.trace),
+        });
+        guarded_res = Some(g);
+    }
+
+    // Selector filtering: print only the requested artifacts.
+    if !o.selectors.is_empty() {
+        let mut picked: Vec<&DumpItem> = Vec::new();
+        for sel in &o.selectors {
+            let matched: Vec<&DumpItem> = items.iter().filter(|it| it.matches(sel)).collect();
+            if matched.is_empty() {
+                let keys: Vec<&str> = items.iter().map(|it| it.key).collect();
+                return Err(format!(
+                    "dump: unknown selector {sel:?} (available: {})",
+                    keys.join(", ")
+                ));
+            }
+            picked.extend(matched);
+        }
+        if o.only_json {
+            let mut out = serde_json::Map::new();
+            for it in picked {
+                out.insert(
+                    it.key.to_string(),
+                    to_value(&Artifact {
+                        explanation: it.explanation.to_string(),
+                        value: it.value.clone(),
+                    }),
+                );
+            }
+            print_json(&Value::Object(out));
+            return Ok(());
+        }
+        for it in picked {
+            println!("\n--- {} ---", it.title);
+            println!("{}", paint(C_DIM, &wrap(it.explanation, 96)));
+            print_json(&it.value);
+        }
+        return Ok(());
+    }
+
+    if o.only_json {
+        let mut artifacts = serde_json::Map::new();
+        for it in &items {
+            artifacts.insert(
+                it.key.to_string(),
+                serde_json::json!({"explanation": it.explanation, "value": it.value}),
+            );
+        }
+        let mut checks = serde_json::json!({
+            "pca0Digest": d0,
+            "previousPcaHashMatchesPca0Digest": pca1
+                .proof_of_relationship.as_ref()
+                .map(|p| p.previous_pca_hash == d0)
+                .unwrap_or(false),
+            "verifyFullChainOk": verify_err.is_none(),
+            "authority": inv,
+            "tamperProof": {
+                "explanation": "Editing one signed field (invariants.operations) and re-verifying: the Ed25519 signature no longer verifies, so the edit is rejected.",
+                "editedSignedField": "invariants.operations",
+                "rejected": tamper_err.is_some(),
+                "reason": tamper_err.clone().unwrap_or_default(),
             },
-            checks: DumpChecks {
-                pca0_digest: d0.clone(),
-                previous_pca_hash_matches_pca0_digest: pca1
-                    .proof_of_relationship
-                    .as_ref()
-                    .map(|p| p.previous_pca_hash == d0)
-                    .unwrap_or(false),
-                verify_full_chain_ok: verify_err.is_none(),
-                authority: inv.clone(),
-                tamper_proof: TamperProof {
-                    explanation: "Editing one signed field (invariants.operations) and re-verifying: the Ed25519 signature no longer verifies, so the edit is rejected.".to_string(),
-                    edited_signed_field: "invariants.operations".to_string(),
-                    rejected: tamper_err.is_some(),
-                    reason: tamper_err.clone().unwrap_or_default(),
-                },
-            },
-        };
-        print_json(&out);
+        });
+        if let Some(g) = &guarded_res {
+            checks["guardrailReceiver"] = to_value(&g.receiver);
+        }
+        print_json(&serde_json::json!({
+            "description": "Real PIC v0.2 signed artifacts (Ed25519 + SHA-256 hash chain), produced live on this run — nothing precomputed.",
+            "artifacts": artifacts,
+            "checks": checks,
+        }));
         return Ok(());
     }
 
     header("Inspect real artifacts (dump)");
-    println!("\n--- PCA0 (origin, signed by alice) ---");
-    print_json(&pca0);
-    println!("PCA0 digest (content id): {d0}");
-    println!("\n--- PCA1 (successor: real PoR, previousPcaHash, executor attestation, single signature) ---");
-    print_json(&pca1);
+    for it in &items {
+        println!("\n--- {} ---", it.title);
+        print_json(&it.value);
+    }
+    println!("\nPCA0 digest (content id): {d0}");
     println!(
         "PCA1.proofOfRelationship.previousPcaHash == PCA0 digest ? {}",
         pca1.proof_of_relationship
@@ -242,10 +372,8 @@ fn run_dump(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
             .map(|p| p.previous_pca_hash == d0)
             .unwrap_or(false)
     );
-    println!("\n--- Envelope [predecessor, current], signed by the forwarder ---");
-    print_json(&env);
     println!(
-        "\nVerifyFullChain([PCA0, PCA1]) -> ok={}, authority={}",
+        "VerifyFullChain([PCA0, PCA1]) -> ok={}, authority={}",
         verify_err.is_none(),
         go_slice(&inv)
     );
@@ -254,13 +382,23 @@ fn run_dump(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
         tamper_err.is_some()
     );
     println!("reason: {}", reason(&tamper_err));
+    if let Some(g) = &guarded_res {
+        render_receiver(&g.receiver);
+    }
+    println!(
+        "{}",
+        paint(
+            C_DIM,
+            "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail guard pdp"
+        )
+    );
     Ok(())
 }
 
 // --- why-pic (authority mixing) ---------------------------------------------
 
-fn run_authority_mixing(now: DateTime<Utc>) -> Result<(), String> {
-    header("Authority Mixing / cross-lineage composition (Why PIC; spec §1.4)");
+fn run_authority_mixing(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
+    header("Authority Mixing / invalid cross-lineage import (Why PIC; spec §1.4)");
     let w = World::new()?;
     let res = w.authority_mixing(now)?;
     println!(
@@ -287,15 +425,19 @@ fn run_authority_mixing(now: DateTime<Utc>) -> Result<(), String> {
     println!("  reason: {}", reason(&res.compose_err));
     println!("\nread-all belongs to the backup lineage; it has no Proof of Relationship");
     println!("into the summary lineage, so PIC cannot represent the composed state.");
+    if o.guardrail {
+        let chain = w.build_chain(2, now)?;
+        return render_tip_guard(&w, chain, "s3://backups/tenant-42", now);
+    }
     Ok(())
 }
 
 // --- confused deputy --------------------------------------------------------
 
-fn run_confused_deputy(now: DateTime<Utc>) -> Result<(), String> {
+fn run_confused_deputy(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     header("Cross-Service Confused Deputy (Alice → Archive → Storage)");
     let w = World::new()?;
-    let (_, req, res) = w.case1_legit(now)?;
+    let (legit_chain, req, res) = w.case1_legit(now)?;
     println!("Case 1  Archive's own transaction, read {}", req.target);
     println!(
         "        verified={}  authorized={}  -> {}",
@@ -328,12 +470,15 @@ fn run_confused_deputy(now: DateTime<Utc>) -> Result<(), String> {
         )
     );
     println!("        reason: {}", reason(&res.verify_err));
+    if o.guardrail {
+        return render_tip_guard(&w, legit_chain, "s3://archive/tenant-42", now);
+    }
     Ok(())
 }
 
 // --- snapshot ---------------------------------------------------------------
 
-fn run_snapshot(now: DateTime<Utc>) -> Result<(), String> {
+fn run_snapshot(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     header("Snapshot Hash Chain profile (Prover/Verifier spec §5.2)");
     const HOPS: usize = 128;
     const TAIL: usize = 8;
@@ -383,12 +528,15 @@ fn run_snapshot(now: DateTime<Utc>) -> Result<(), String> {
             full.as_secs_f64() / from_snap.as_secs_f64()
         );
     }
+    if o.guardrail {
+        return render_tip_guard(&w, chain[..2].to_vec(), "s3://backups/tenant-42", now);
+    }
     Ok(())
 }
 
 // --- revocation -------------------------------------------------------------
 
-fn run_revocation(now: DateTime<Utc>) -> Result<(), String> {
+fn run_revocation(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     header("Revocation — LINEAGE-SUFFIX causal cutoff (Revocation spec §3.1)");
     const HOPS: usize = 6;
     let w = World::new()?;
@@ -424,6 +572,9 @@ fn run_revocation(now: DateTime<Utc>) -> Result<(), String> {
         verdict(err.is_some(), "REJECTED at the cutoff", "accepted")
     );
     println!("reason: {}", reason(&err));
+    if o.guardrail {
+        return render_tip_guard(&w, chain[..2].to_vec(), "s3://backups/tenant-42", now);
+    }
     Ok(())
 }
 

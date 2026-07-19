@@ -12,11 +12,11 @@ use chrono::{DateTime, Utc};
 use pic::scenario::{FlowHop, RogueAttempt, World};
 use serde::Serialize;
 
-pub(crate) fn run_flow(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
+pub(crate) fn run_flow(now: DateTime<Utc>, o: &crate::Opts) -> Result<(), String> {
     let w = World::new()?;
     let res = w.flow(now)?;
 
-    if only_json {
+    if o.only_json {
         print_json(&res);
         return Ok(());
     }
@@ -46,6 +46,10 @@ pub(crate) fn run_flow(now: DateTime<Utc>, only_json: bool) -> Result<(), String
             "each box's JSON above is the real signed PCA that hop produced; run with --only-json | jq for the machine-readable flow."
         )
     );
+    if o.guardrail {
+        let chain: Vec<pic::Pca> = res.hops.iter().map(|h| h.generates.clone()).collect();
+        return crate::guarded::render_tip_guard(&w, chain, "s3://backups/tenant-42", now);
+    }
     Ok(())
 }
 

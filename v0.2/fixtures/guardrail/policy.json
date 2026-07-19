@@ -1,0 +1,8 @@
+{
+  "id": "policy-backup-pipeline-01",
+  "effect": "permit",
+  "appliesTo": {
+    "crossing": "*"
+  },
+  "when": "participants.all(l, 'data-protection' in l.scopes || 'ai-compliance' in l.scopes)"
+}

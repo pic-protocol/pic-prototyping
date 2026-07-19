@@ -25,11 +25,14 @@ import (
 var b64 = base64.RawURLEncoding
 
 // Set is the loaded, cached fixture cast: a key registry with every identity,
-// the identities by actor name, and the signed executor attestations by name.
+// the identities by actor name, the signed executor attestations by name, and
+// the Execution Guardrail fixtures (policy and semantic-scope bindings).
 type Set struct {
 	Registry     *pic.Registry
 	Identities   map[string]*pic.Identity
 	Attestations map[string]pic.Attestation
+	Policy       pic.Policy
+	Scopes       pic.ScopeBindings
 }
 
 // Identity returns the loaded identity for an actor name, or panics if absent
@@ -131,6 +134,26 @@ func load(dir string) (*Set, error) {
 		}
 		set.Attestations[strings.TrimSuffix(e.Name(), ".json")] = att
 	}
+
+	// Execution Guardrail fixtures: the policy and the scope bindings.
+	graw, err := os.ReadFile(filepath.Join(dir, "guardrail", "policy.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read guardrail policy: %w", err)
+	}
+	if err := json.Unmarshal(graw, &set.Policy); err != nil {
+		return nil, fmt.Errorf("guardrail policy.json: %w", err)
+	}
+	sraw, err := os.ReadFile(filepath.Join(dir, "guardrail", "scopes.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read guardrail scopes: %w", err)
+	}
+	var scopes struct {
+		Bindings map[string][]string `json:"bindings"`
+	}
+	if err := json.Unmarshal(sraw, &scopes); err != nil {
+		return nil, fmt.Errorf("guardrail scopes.json: %w", err)
+	}
+	set.Scopes = scopes.Bindings
 	return set, nil
 }
 

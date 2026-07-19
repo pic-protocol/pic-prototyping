@@ -44,7 +44,7 @@ struct BenchRow {
     ops_per_sec: f64,
 }
 
-pub(crate) fn run_bench(now: DateTime<Utc>, only_json: bool) -> Result<(), String> {
+pub(crate) fn run_bench(now: DateTime<Utc>, o: &crate::Opts) -> Result<(), String> {
     let w = World::new()?;
     let reg = &w.set.registry;
     let inv = Invariants {
@@ -132,12 +132,238 @@ pub(crate) fn run_bench(now: DateTime<Utc>, only_json: bool) -> Result<(), Strin
         });
     }
 
-    if only_json {
-        print_json(&rows);
+    let mut grows: Vec<BenchRow> = Vec::new();
+    let mut genv_size = 0usize;
+    if o.guardrail {
+        (grows, genv_size) = bench_guardrail(&w, now)?;
+    }
+
+    if o.only_json {
+        let mut all = rows;
+        all.extend(grows);
+        print_json(&all);
         return Ok(());
     }
     render_bench(&rows, &sizes);
+    if o.guardrail {
+        render_guard_bench(&grows, genv_size);
+    }
     Ok(())
+}
+
+/// Measures the guarded crossing on the canonical A+B example: each component
+/// alone, then the whole pipeline end to end.
+fn bench_guardrail(w: &World, now: DateTime<Utc>) -> Result<(Vec<BenchRow>, usize), String> {
+    use pic::scenario::guardrail::{GRANT_AGENT_S3_WRITER, GRANT_USER_BACKUP};
+    use pic::types::ExecutionContract;
+    use pic::{Guardrail, LocalPdp, MultiLineageExecution, Participant, Pdp, Sandbox};
+
+    let reg = &w.set.registry;
+    let pdp = LocalPdp {
+        policy: w.set.policy.clone(),
+    };
+    let guard = Guardrail::new(w.set.identity("guardrail"), reg, &pdp, &w.set.scopes);
+    let sandbox = Sandbox::new(w.set.identity("sandbox"), &guard);
+    let agent = w.set.identity("summary-service");
+    let agent_att = w.set.attestation("summary-service");
+    let contract = ExecutionContract::default();
+
+    let pca0_a = mint_pca0(
+        w.set.identity("alice"),
+        Invariants {
+            operations: vec!["read-all".into(), "backup".into()],
+            execution_contract: contract.clone(),
+        },
+        GRANT_USER_BACKUP,
+        now,
+    );
+    let pca1_a = Prover::new(agent, agent_att.clone()).continue_(
+        &pca0_a,
+        Invariants {
+            operations: vec!["backup".into()],
+            execution_contract: contract.clone(),
+        },
+        Request {
+            operation: "backup".into(),
+            target: "/user/dataset".into(),
+            security_domain: "tenant-42".into(),
+            ..Default::default()
+        },
+        now,
+    )?;
+    let inv_b = Invariants {
+        operations: vec!["write:s3/backups/*".into()],
+        execution_contract: contract.clone(),
+    };
+    let pca0_b = mint_pca0(agent, inv_b.clone(), GRANT_AGENT_S3_WRITER, now);
+    let pca1_b = Prover::new(agent, agent_att.clone()).continue_(
+        &pca0_b,
+        inv_b,
+        Request {
+            operation: "write".into(),
+            target: "s3/backups/tenant-42/dataset.tar".into(),
+            security_domain: "tenant-42".into(),
+            ..Default::default()
+        },
+        now,
+    )?;
+    let mle = MultiLineageExecution {
+        participants: vec![
+            Participant {
+                label: "A".into(),
+                chain: vec![pca0_a, pca1_a],
+            },
+            Participant {
+                label: "B".into(),
+                chain: vec![pca0_b, pca1_b],
+            },
+        ],
+        proposing: "B".into(),
+        destination: "s3://backups/tenant-42".into(),
+    };
+
+    let pres = sandbox.present(&mle, now)?;
+    let (env, trace) = guard.enforce(&pres, now);
+    let env = env.ok_or("bench: guarded crossing unexpectedly denied")?;
+    let recognized = w.recognized_guardrails();
+    let req = trace.pdp_request.clone().ok_or("bench: no pdp request")?;
+
+    type Case<'a> = (&'a str, Box<dyn Fn() + 'a>);
+    let cases: Vec<Case> = vec![
+        (
+            "sandbox: present (forwardingProof)",
+            Box::new(|| {
+                let _ = sandbox.present(&mle, now);
+            }),
+        ),
+        (
+            "guardrail: validate participants",
+            Box::new(|| {
+                for p in &mle.participants {
+                    let _ = Verifier::new(reg, None).verify_full_chain(&p.chain, now);
+                }
+            }),
+        ),
+        (
+            "guardrail: PDP evaluate",
+            Box::new(|| {
+                let _ = pdp.evaluate(&req);
+            }),
+        ),
+        (
+            "guardrail: enforce (3 steps)",
+            Box::new(|| {
+                let _ = guard.enforce(&pres, now);
+            }),
+        ),
+        (
+            "receiver: verify envelope",
+            Box::new(|| {
+                let _ = pic::verify_guardrail_envelope(reg, &recognized, Some(&env), now);
+            }),
+        ),
+        (
+            "guarded crossing end to end",
+            Box::new(|| {
+                let _ = sandbox.cross(&mle, now);
+            }),
+        ),
+    ];
+    let mut rows = Vec::with_capacity(cases.len());
+    for (name, f) in &cases {
+        let (iters, per) = measure(f.as_ref());
+        let ns = per.as_nanos() as f64;
+        rows.push(BenchRow {
+            name: name.to_string(),
+            iters,
+            ns_per_op: ns,
+            ops_per_sec: 1e9 / ns,
+        });
+    }
+    Ok((rows, json_len(&env)))
+}
+
+/// Prints the guarded-crossing table plus the decomposition of the end-to-end
+/// cost into its components.
+fn render_guard_bench(rows: &[BenchRow], env_size: usize) {
+    println!();
+    println!(
+        "  {}{}",
+        paint(C_BOLD, "guarded crossing (--guardrail)"),
+        paint(C_DIM, "  sandbox → guardrail (validate → PDP → sign) → receiver")
+    );
+    println!("  {}", paint(C_DIM, &"─".repeat(74)));
+
+    let max_ns = rows.iter().fold(0.0f64, |m, r| m.max(r.ns_per_op));
+    for r in rows {
+        let lat = fmt_dur(Duration::from_nanos(r.ns_per_op as u64));
+        let thr = format!("{}/s", commas(r.ops_per_sec as i64));
+        println!(
+            "  {} {} {} {}",
+            pad(&paint(C_CYAN, &r.name), 32),
+            pad_left(&paint(C_YELLOW, &lat), 11),
+            pad_left(&paint(C_GREEN, &thr), 14),
+            latency_bar(r.ns_per_op, max_ns)
+        );
+    }
+    println!("  {}", paint(C_DIM, &"─".repeat(74)));
+
+    let get = |prefix: &str| -> f64 {
+        rows.iter()
+            .find(|r| r.name.starts_with(prefix))
+            .map(|r| r.ns_per_op)
+            .unwrap_or(0.0)
+    };
+    let present = get("sandbox: present");
+    let validate = get("guardrail: validate");
+    let pdp = get("guardrail: PDP");
+    let enforce = get("guardrail: enforce");
+    let receiver = get("receiver:");
+    let total = get("guarded crossing");
+    let sign = (enforce - validate - pdp).max(0.0);
+    if total > 0.0 {
+        println!();
+        println!(
+            "  {}{}",
+            paint(C_BOLD, "end-to-end decomposition"),
+            paint(C_DIM, "  (share of one guarded crossing)")
+        );
+        let comp = [
+            ("sandbox present + forwardingProof", present),
+            ("guardrail validate PCAs", validate),
+            ("guardrail PDP evaluate", pdp),
+            ("guardrail sign envelope (derived)", sign),
+        ];
+        for (name, ns) in comp {
+            println!(
+                "    {} {}  {}",
+                pad(name, 36),
+                pad_left(&paint(C_YELLOW, &fmt_dur(dur(ns))), 11),
+                paint(C_DIM, &format!("{:4.1}%", ns / total * 100.0))
+            );
+        }
+        println!("    {}", paint(C_DIM, &"─".repeat(52)));
+        println!(
+            "    {} {}   {}",
+            pad(&paint(C_BOLD, "guarded crossing total"), 36),
+            pad_left(&paint("1;33", &fmt_dur(dur(total))), 11),
+            paint(
+                C_GREEN,
+                &format!("~{} crossings/s", commas((1e9 / total) as i64))
+            )
+        );
+        println!(
+            "    {} {}  {}",
+            pad("receiver verify (next hop)", 36),
+            pad_left(&paint(C_YELLOW, &fmt_dur(dur(receiver))), 11),
+            paint(C_DIM, "sandbox mode acceptance")
+        );
+    }
+    println!(
+        "\n  {}  guardrail envelope {}",
+        paint(C_BOLD, "serialized size"),
+        paint(C_YELLOW, &size_str(env_size))
+    );
 }
 
 /// Runs `f` until at least ~200ms have elapsed and returns the iteration count

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pic-protocol/pic-prototyping/v0.2/golang/pic"
 	"github.com/pic-protocol/pic-prototyping/v0.2/golang/scenario"
 )
 
@@ -45,8 +46,9 @@ const (
 // runFlow renders one end-to-end execution flow: authority is minted at the
 // origin and narrows hop by hop as real fixture executors continue it, each
 // producing a signed PCA, ending with a rogue expansion that PIC rejects. With
-// onlyJSON it emits the whole flow as a single JSON document (for jq).
-func runFlow(now time.Time, onlyJSON bool) error {
+// --only-json it emits the whole flow as a single JSON document (for jq); with
+// --guardrail the flow's chain then crosses the guarded boundary.
+func runFlow(now time.Time, o opts) error {
 	w, err := scenario.NewWorld()
 	if err != nil {
 		return err
@@ -56,7 +58,7 @@ func runFlow(now time.Time, onlyJSON bool) error {
 		return err
 	}
 
-	if onlyJSON {
+	if o.onlyJSON {
 		printJSON(res)
 		return nil
 	}
@@ -75,6 +77,13 @@ func runFlow(now time.Time, onlyJSON bool) error {
 	fmt.Printf("\n%s chain verified end to end — authority at tip = %s\n",
 		paint(cGreen, "✔"), paint(cGreen, fmt.Sprint(res.TipAuthority)))
 	fmt.Println(paint(cDim, "each box's JSON above is the real signed PCA that hop produced; run with --only-json | jq for the machine-readable flow."))
+	if o.guardrail {
+		chain := make([]*pic.PCA, 0, len(res.Hops))
+		for _, h := range res.Hops {
+			chain = append(chain, h.Generates)
+		}
+		return renderTipGuard(w, chain, "s3://backups/tenant-42", now)
+	}
 	return nil
 }
 

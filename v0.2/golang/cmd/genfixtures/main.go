@@ -39,6 +39,8 @@ var actors = []actor{
 	{name: "alice", did: "did:web:alice.example"},
 	{name: "org-authority", did: "did:web:org-authority.example"},
 	{name: "snapshot-issuer", did: "did:web:snapshot.example"},
+	{name: "guardrail", did: "did:web:guardrail.example"},
+	{name: "sandbox", did: "did:web:sandbox.example"},
 	{name: "gateway", did: "did:web:gateway.example", role: "gateway", execModel: "deterministic", isExecutor: true},
 	{name: "backup-service", did: "did:web:backup.example", role: "backup-service", execModel: "deterministic", compliance: []string{"GDPR"}, isExecutor: true},
 	{name: "summary-service", did: "did:web:summary.example", role: "summary-service", execModel: "agentic", isExecutor: true},
@@ -113,7 +115,44 @@ func run(outDir string) error {
 			}
 		}
 	}
-	return nil
+	return writeGuardrailFixtures(outDir)
+}
+
+// writeGuardrailFixtures emits the Execution Guardrail fixtures: the policy
+// (mirroring the spec's illustrative JSON, with an elementary CEL-like
+// condition) and the policy-controlled scope bindings (grantId or origin
+// issuer -> semantic scopes). A scope adds no authority.
+func writeGuardrailFixtures(outDir string) error {
+	dir := filepath.Join(outDir, "guardrail")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	policy := pic.Policy{
+		ID:        "policy-backup-pipeline-01",
+		Effect:    "permit",
+		AppliesTo: map[string]string{"crossing": "*"},
+		When:      "participants.all(l, 'data-protection' in l.scopes || 'ai-compliance' in l.scopes)",
+	}
+	if err := writeJSON(filepath.Join(dir, "policy.json"), policy); err != nil {
+		return err
+	}
+	scopes := scopesFile{
+		Description: "Policy-controlled mapping binding semantic scopes to a Lineage Execution through its origin grantId (or origin issuer DID as fallback). Execution Guardrail spec §4.2: a scope adds no authority; it only informs the guardrail policy decision, and it is not under the unilateral control of the evaluated executor.",
+		Bindings: map[string][]string{
+			"urn:pic:grant:user-backup":      {"data-protection"},
+			"urn:pic:grant:agent-s3-writer":  {"data-protection", "ai-compliance"},
+			"urn:pic:grant:external-sharing": {"external-sharing"},
+			"did:web:alice.example":          {"data-protection"},
+			"did:web:archive.example":        {"data-protection"},
+		},
+	}
+	return writeJSON(filepath.Join(dir, "scopes.json"), scopes)
+}
+
+// scopesFile is the on-disk shape of the scope bindings fixture.
+type scopesFile struct {
+	Description string              `json:"description"`
+	Bindings    map[string][]string `json:"bindings"`
 }
 
 // seedFor derives a deterministic 32-byte Ed25519 seed from the actor name.
