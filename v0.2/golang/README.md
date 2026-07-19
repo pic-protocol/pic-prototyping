@@ -74,6 +74,20 @@ go run ./cmd/picdemo bench --only-json | jq
 # inspect real signed artifacts + a live tamper proof
 go run ./cmd/picdemo dump                        # human-readable
 go run ./cmd/picdemo dump --only-json | jq       # one JSON document
+go run ./cmd/picdemo dump hop1                   # only one artifact (pca0|hop0, pca1|hop1, envelope)
+
+# Execution Guardrail (sandbox + guardrail + simulated PDP over the fixture policy)
+go run ./cmd/picdemo guardrail                   # canonical guarded crossing: permit, deny, invalid-PCA
+go run ./cmd/picdemo all --guardrail             # every scenario, tip crossing routed through the guardrail
+go run ./cmd/picdemo flow --guardrail            # the flow's chain crosses the guarded boundary
+go run ./cmd/picdemo bench --guardrail           # + guarded-crossing timings, decomposed per component
+
+# guardrail artifacts (add selectors to filter)
+go run ./cmd/picdemo dump --guardrail            # everything, incl. policy, scopes, MLE, PDP, envelope
+go run ./cmd/picdemo dump --guardrail policy scopes   # the policy + the scope bindings
+go run ./cmd/picdemo dump --guardrail pdp             # PDP exchange: request -> decision (with reason)
+go run ./cmd/picdemo dump --guardrail guard           # the signed guardrail forwarding envelope
+go run ./cmd/picdemo dump --guardrail denytrace       # the deny case (external-sharing participant)
 ```
 
 Or via [Task](https://taskfile.dev) from the repository root:
@@ -81,6 +95,8 @@ Or via [Task](https://taskfile.dev) from the repository root:
 ```bash
 task v0-2-go-demo               # go run ./cmd/picdemo
 task v0-2-go-demo -- snapshot   # pass a scenario to the demo
+task v0-2-go-demo -- guardrail                    # the guarded-crossing scenario
+task v0-2-go-demo -- dump --guardrail pdp policy  # inspect the PDP exchange + policy
 task v0-2-go-test               # go test ./...
 task v0-2-go-bench              # go test -bench . -benchmem ./...
 ```
