@@ -66,6 +66,20 @@ cargo run --bin picdemo -- bench --only-json | jq
 # inspect real signed artifacts + a live tamper proof
 cargo run --bin picdemo -- dump                    # human-readable
 cargo run --bin picdemo -- dump --only-json | jq   # one JSON document
+cargo run --bin picdemo -- dump hop1               # only one artifact (pca0|hop0, pca1|hop1, envelope)
+
+# Execution Guardrail (sandbox + guardrail + simulated PDP over the fixture policy)
+cargo run --bin picdemo -- guardrail               # canonical guarded crossing: permit, deny, invalid-PCA
+cargo run --bin picdemo -- all --guardrail         # every scenario, tip crossing routed through the guardrail
+cargo run --bin picdemo -- flow --guardrail        # the flow's chain crosses the guarded boundary
+cargo run --bin picdemo -- bench --guardrail       # + guarded-crossing timings, decomposed per component
+
+# guardrail artifacts (add selectors to filter)
+cargo run --bin picdemo -- dump --guardrail                 # everything, incl. policy, scopes, MLE, PDP, envelope
+cargo run --bin picdemo -- dump --guardrail policy scopes   # the policy + the scope bindings
+cargo run --bin picdemo -- dump --guardrail pdp             # PDP exchange: request -> decision (with reason)
+cargo run --bin picdemo -- dump --guardrail guard           # the signed guardrail forwarding envelope
+cargo run --bin picdemo -- dump --guardrail denytrace       # the deny case (external-sharing participant)
 ```
 
 Or via [Task](https://taskfile.dev) from the repository root:
@@ -73,6 +87,8 @@ Or via [Task](https://taskfile.dev) from the repository root:
 ```bash
 task v0-2-rust-demo               # cargo run --bin picdemo
 task v0-2-rust-demo -- snapshot   # pass a scenario to the demo
+task v0-2-rust-demo -- guardrail                    # the guarded-crossing scenario
+task v0-2-rust-demo -- dump --guardrail pdp policy  # inspect the PDP exchange + policy
 task v0-2-rust-test               # cargo test
 task v0-2-rust-bench              # colored benchmark report
 task v0-2-rust-fixtures           # regenerate v0.2/fixtures
