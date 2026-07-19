@@ -135,11 +135,13 @@ v0.2/golang
 │   ├── verifier.go         # Verifier: origin + per-hop checks (Prover/Verifier spec §3.3)
 │   ├── snapshot.go         # Snapshot Hash Chain profile (§5.2)
 │   ├── revocation.go       # lineageId derivation, LINEAGE-SUFFIX store and check
+│   ├── guardrail.go        # Execution Guardrail: MLE, scopes, PDP, sandbox, guardrail envelope
 │   ├── pic_test.go         # unit tests
 │   └── bench_test.go       # benchmarks
 └── scenario/               # the Why-PIC use cases, on the fixtures
     ├── authoritymixing.go  # cross-lineage composition (Why PIC; §1.4)
-    └── confuseddeputy.go   # cross-service confused deputy + chain builder
+    ├── confuseddeputy.go   # cross-service confused deputy + chain builder
+    └── guardrail.go        # canonical guarded crossing (permit / deny / invalid PCA)
 ```
 
 ## Fixtures

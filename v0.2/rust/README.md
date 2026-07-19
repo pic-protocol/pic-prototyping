@@ -38,6 +38,14 @@ specifications:
    trusted snapshot — cost `O(hops since snapshot)` instead of `O(n)`.
 4. **Revocation**: a `LINEAGE-SUFFIX(lineageId, fromCounter)` cutoff rejects a hop
    and everything causally after it, while earlier hops stay valid.
+5. **Execution Guardrail** (`guardrail`, or `--guardrail` on any scenario): the
+   canonical guarded crossing of the PIC Execution Guardrail spec — an AI agent
+   proposes an S3 write as one **Multi-Lineage Execution** (its own Lineage
+   Execution B plus the user's A); the **sandbox** presents it
+   (`forwardingProof`), the **guardrail** validates every PCA, evaluates the
+   fixture policy over the **semantic scopes** through a simulated PDP, and
+   enforces permit or deny, signing the guardrail forwarding envelope
+   (`guardrailProof`). Deny, invalid-PCA, bypass, and tamper cases included.
 
 ## Requirements
 
@@ -117,8 +125,9 @@ v0.2/rust
 │   ├── verifier.rs        # origin + per-hop checks (Prover/Verifier spec §3.3)
 │   ├── snapshot.rs        # Snapshot Hash Chain profile (§5.2)
 │   ├── revocation.rs      # lineageId derivation, LINEAGE-SUFFIX store and check
-│   ├── fixtureset.rs      # cached (OnceLock) loader of v0.2/fixtures
-│   ├── scenario/          # the Why-PIC use cases, on the fixtures
+│   ├── guardrail.rs       # Execution Guardrail: MLE, scopes, PDP, sandbox, guardrail envelope
+│   ├── fixtureset.rs      # cached (OnceLock) loader of v0.2/fixtures (incl. policy + scopes)
+│   ├── scenario/          # the Why-PIC use cases + the guarded crossing, on the fixtures
 │   └── bin/
 │       ├── genfixtures.rs # deterministic generator for v0.2/fixtures
 │       └── picdemo/       # CLI: scenarios, flow, dump, bench
