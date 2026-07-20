@@ -5,18 +5,24 @@
 
 // Command picdemo runs the PIC v0.2 Go prototype scenarios and prints timings.
 //
-//	go run ./cmd/picdemo [why-pic|confused-deputy|snapshot|revocation|guardrail|flow|bench|dump|all] [flags] [dump selectors]
+//	go run ./cmd/picdemo [why-pic|confused-deputy|snapshot|revocation|guardrail|exec|flow|bench|dump|all] [flags] [args]
+//
+// exec is the Sandboxed Execution viewer (guardrail on by default):
+//
+//	picdemo exec                  compact hop diagram (PIC carrying PIC)
+//	picdemo exec A                one carried lineage (or B, outer, all)
+//	picdemo exec all --pca        every lineage, full signed PCAs
+//	picdemo exec --no-guardrail   inner lineages only (debug)
 //
 // Flags:
 //
-//	--guardrail   load the Execution Guardrail fixtures (sandbox + guardrail +
-//	              simulated PDP) and route each scenario's tip crossing through
-//	              them; without it, everything behaves exactly as before.
+//	--guardrail   run each scenario's tip crossing through a Sandboxed Execution
+//	              (outer ENFORCE lineage); without it, everything behaves as before.
 //	--only-json   emit a single JSON document (for jq) instead of the report.
 //
 // Dump selectors (with `dump`): pca0|hop0, pca1|hop1, envelope, and with
-// --guardrail also policy, scopes, mle, pdp, trace, guard, denytrace.
-// No selector prints everything.
+// --guardrail also policy, scopes, origin, mle, multilineage, pdp, trace, outer,
+// accept, denytrace. No selector prints everything.
 //
 // It uses the real v0.2 fixtures (DID identities, signed attestations, and the
 // guardrail policy/scope bindings) loaded once into memory. It is
@@ -71,13 +77,15 @@ func main() {
 	order := []string{"why-pic", "confused-deputy", "snapshot", "revocation"}
 
 	switch which {
-	case "dump", "flow", "bench":
+	case "dump", "flow", "bench", "exec":
 		var derr error
 		switch which {
 		case "flow":
 			derr = runFlow(now, o)
 		case "bench":
 			derr = runBench(now, o)
+		case "exec":
+			derr = runExec(now, o)
 		default:
 			derr = runDump(now, o)
 		}
@@ -103,7 +111,7 @@ func main() {
 				which, strings.Join(args, " "))
 			os.Exit(2)
 		}
-		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, guardrail, flow, bench, dump, or all)\n", which, order)
+		fmt.Fprintf(os.Stderr, "unknown scenario %q (use: %v, guardrail, exec, flow, bench, dump, or all)\n", which, order)
 		os.Exit(2)
 	}
 	for _, name := range run {
@@ -195,35 +203,52 @@ func runDump(now time.Time, o opts) error {
 		}
 		items = append(items,
 			dumpItem{key: "policy",
-				title:       "Guardrail policy (fixture, spec-shaped)",
-				explanation: "The configured policy the PDP evaluates: an effect and an elementary CEL-like condition over the participants' semantic scopes. The decision defaults to deny.",
+				title:       "Enforcement policy (fixture, spec-shaped)",
+				explanation: "The configured policy the enforcement function evaluates: an effect and an elementary CEL-like condition over the carried lineages' semantic scopes. The decision defaults to deny.",
 				value:       g.Policy},
 			dumpItem{key: "scopes",
 				title:       "Semantic-scope bindings (policy-controlled mapping)",
-				explanation: "Scopes are bound to a Lineage Execution through its origin grantId (or origin issuer): origin-bound metadata the executor cannot self-assert. A scope adds no authority.",
+				explanation: "Scopes are bound to a carried lineage through its origin grantId (or origin issuer): origin-bound metadata the executor cannot self-assert. A scope adds no authority.",
 				value:       g.Scopes},
+			dumpItem{key: "origin", aliases: []string{"pca0g"},
+				title:       "PCA0-G (outer ENFORCE lineage origin, signed by the authorized sandbox origin)",
+				explanation: "The origin of the outer Sandboxed Execution lineage. It carries operations:[ENFORCE] and the guardrail execution contract, no PoR and no verdict. Minted by an authorized sandbox origin (did:web:enforcement.example).",
+				value:       g.Origin},
 			dumpItem{key: "mle",
-				title:       "Multi-Lineage Execution (the runtime carrier)",
-				explanation: "n >= 1 Lineage Executions carried together for one proposed transition. The proposed transition consists exclusively of the concrete signed requests carried by the participants; no authority of its own.",
+				title:       "Multi-Lineage Execution (the input carrier)",
+				explanation: "n >= 1 independent carried lineages proposed together for one transition. The proposed transition is exactly the concrete signed requests they carry; the carrier has no authority of its own.",
 				value:       g.Permit.MLE},
+			dumpItem{key: "multilineage", aliases: []string{"ml", "carried"},
+				title:       "multiLineage (the signed profile field carried by PCA1-G)",
+				explanation: "The inner Multi-Lineage Execution as carried in the outer PCA's signed multiLineage field: carriedLineages (full chains) + crossing context. request.multiLineageDigest = H(\"PIC-Multi-Lineage-v0\" || canonical(multiLineage)) pins it.",
+				value: func() any {
+					if g.Permit.OuterPCA != nil {
+						return g.Permit.OuterPCA.MultiLineage
+					}
+					return nil
+				}()},
 			dumpItem{key: "pdp",
-				title:       "PDP exchange (request → decision)",
-				explanation: "What the guardrail hands to the (simulated) PDP — participants with scopes and destination — and the decision that comes back. The guardrail enforces it; the PDP is one possible implementation of policy evaluation.",
+				title:       "Enforcement function exchange (request → decision)",
+				explanation: "What the guardrail hands to the (simulated) PDP — carried lineages with scopes and destination — and the decision that comes back. The guardrail enforces it; a PDP is one possible implementation.",
 				value: map[string]any{
 					"request":  g.Permit.Trace.PDPRequest,
 					"decision": g.Permit.Trace.Decision,
 				}},
 			dumpItem{key: "trace",
-				title:       "Guardrail enforcement trace (validate → evaluate → enforce)",
-				explanation: "What the guardrail did, in enforcement order: PCA validation per participant, the PDP call, and the enforced decision.",
+				title:       "Guardrail enforcement trace (outer → carried → evaluate → prove)",
+				explanation: "What the guardrail did, in phase order: outer-predecessor validation, carried-lineage validation, the enforcement-function call, and the produced outer PCA (on permit).",
 				value:       g.Permit.Trace},
-			dumpItem{key: "guard", aliases: []string{"guardrail", "guard1"},
-				title:       "Guardrail forwarding envelope (two proofs, never nested)",
-				explanation: "The permitted crossing travels in this envelope. forwardingProof (sandbox) attributes the presentation; guardrailProof (guardrail DID) attests validation + policy + permit and covers the forwardingProofDigest. Neither replaces the executor signature on any PCA.",
-				value:       g.Permit.Envelope},
+			dumpItem{key: "outer", aliases: []string{"guard", "pca1g", "chain"},
+				title:       "Outer ENFORCE lineage [PCA0-G, PCA1-G] — PCA1-G is the guardrail decision",
+				explanation: "The permitted crossing is carried by an ordinary outer PCA (PCA1-G) that continues PCA0-G under PoR. Its request.enforcementResult=permit and it carries the signed multiLineage. No envelope, no second signature.",
+				value:       g.Permit.OuterChain},
+			dumpItem{key: "accept", aliases: []string{"receiver"},
+				title:       "Enforced-acceptance checks (receiving hop)",
+				explanation: "What a conforming receiving hop does: AcceptGuardedCrossing on the outer chain (valid outer PIC, authorized origin, ENFORCE, multiLineageDigest match, valid carried lineages, permit, fresh); a bypass (no outer PCA) and a tampered carried set are rejected.",
+				value:       g.Receiver},
 			dumpItem{key: "denytrace", aliases: []string{"deny"},
 				title:       "Deny trace (A + C, external-sharing)",
-				explanation: "The same pipeline denying: the PDP finds a participant whose scopes satisfy no policy alternative; the guardrail enforces deny and issues no envelope.",
+				explanation: "The same pipeline denying: the enforcement function finds a carried lineage whose scopes satisfy no policy alternative; the guardrail denies and produces no authorizing continuation.",
 				value:       g.Deny.Trace},
 		)
 	}
@@ -304,7 +329,7 @@ func runDump(now time.Time, o opts) error {
 	if g != nil {
 		renderReceiver(g.Receiver)
 	}
-	fmt.Println(paint(cDim, "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail guard pdp"))
+	fmt.Println(paint(cDim, "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail outer multilineage accept"))
 	return nil
 }
 
@@ -313,7 +338,8 @@ func runDump(now time.Time, o opts) error {
 func looksLikeDumpSelector(s string) bool {
 	s = strings.ToLower(strings.TrimLeft(s, "-"))
 	for _, k := range []string{"pca0", "pca1", "hop0", "hop1", "envelope", "policy",
-		"scopes", "mle", "pdp", "trace", "guard", "denytrace", "deny"} {
+		"scopes", "origin", "mle", "multilineage", "ml", "pdp", "trace", "outer",
+		"guard", "accept", "receiver", "denytrace", "deny"} {
 		if s == k || (len(s) >= 3 && strings.HasPrefix(k, s)) {
 			return true
 		}

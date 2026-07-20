@@ -98,3 +98,68 @@ func TestBuildChainVerifies(t *testing.T) {
 		t.Fatalf("chain length = %d, want 11", len(chain))
 	}
 }
+
+func TestSandboxedExecution(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := w.Guarded(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Permit: the guardrail produced an outer PCA1-G continuing PCA0-G, with
+	// enforcementResult=permit and a committed multiLineage.
+	if res.Permit.Err != "" {
+		t.Fatalf("permit crossing errored: %s", res.Permit.Err)
+	}
+	if res.Permit.OuterPCA == nil || res.Permit.OuterPCA.LineageCounter != 1 {
+		t.Fatal("permit did not produce PCA1-G")
+	}
+	if res.Permit.OuterPCA.ProofOfRelationship.Request.EnforcementResult != "permit" {
+		t.Fatal("outer PCA enforcementResult is not permit")
+	}
+	if res.Permit.OuterPCA.MultiLineage == nil || len(res.Permit.OuterPCA.MultiLineage.CarriedLineages) != 2 {
+		t.Fatal("outer PCA does not carry the two carried lineages")
+	}
+
+	// Deny and invalid: no authorizing continuation produced.
+	if res.Deny.OuterPCA != nil {
+		t.Fatal("deny produced an authorizing continuation")
+	}
+	if res.InvalidPCA.OuterPCA != nil {
+		t.Fatal("invalid carried lineage produced an authorizing continuation")
+	}
+
+	// Enforced acceptance: permit accepted; bypass and tamper rejected.
+	if !res.Receiver.Accepted {
+		t.Fatalf("receiver rejected a valid permit: %s", res.Receiver.AcceptErr)
+	}
+	if !res.Receiver.BypassRejected {
+		t.Fatal("bypass (no outer PCA) was not rejected")
+	}
+	if !res.Receiver.TamperRejected {
+		t.Fatal("tampered carried set was not rejected")
+	}
+}
+
+func TestAcceptGuardedCrossingRejectsUnauthorizedOrigin(t *testing.T) {
+	now := time.Now()
+	w, err := NewWorld()
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := w.Guarded(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A receiving hop that does not accept the enforcement origin must reject
+	// even a fully valid outer chain (a valid signature is not authorization).
+	err = pic.AcceptGuardedCrossing(w.Set.Registry, nil,
+		[]string{"did:web:someone-else.example"}, res.Permit.OuterChain, now)
+	if err == nil {
+		t.Fatal("accepted an outer chain from an unauthorized sandbox origin")
+	}
+}

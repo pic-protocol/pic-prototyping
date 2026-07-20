@@ -3,17 +3,20 @@
 // Based on the Provenance Identity Continuity (PIC) Model created by Nicola Gallo.
 // Conforms to the PIC Specification published and maintained by Nitro Agility S.r.l.
 
-//! Renders the guarded crossings of the Execution Guardrail prototype: the
-//! dedicated `guardrail` scenario and the compact block the other scenarios
-//! append under `--guardrail`. Mirror of the Go `cmd/picdemo/guarded.go`.
+//! Renders the Sandboxed Execution of the prototype: the dedicated `guardrail`
+//! scenario and the compact block the other scenarios append under
+//! `--guardrail`. PIC carries PIC. Mirror of the Go `cmd/picdemo/guarded.go`.
 
-use crate::{header, paint, print_json, verdict, Opts, C_ACTOR, C_BOLD, C_CYAN, C_DIM, C_GREEN, C_REJECT, C_YELLOW};
+use crate::{
+    header, paint, print_json, verdict, Opts, C_ACTOR, C_BOLD, C_CYAN, C_DIM, C_GREEN, C_REJECT,
+    C_YELLOW,
+};
 use chrono::{DateTime, Utc};
 use pic::scenario::guardrail::{CrossingOutcome, ReceiverChecks};
 use pic::scenario::World;
 use pic::types::Pca;
 
-/// Renders the canonical guarded crossing end to end.
+/// Renders the canonical Sandboxed Execution end to end.
 pub(crate) fn run_guardrail(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     let w = World::new()?;
     let res = w.guarded(now)?;
@@ -22,7 +25,7 @@ pub(crate) fn run_guardrail(now: DateTime<Utc>, o: &Opts) -> Result<(), String> 
         return Ok(());
     }
 
-    header("Guarded crossing — sandbox + Execution Guardrail");
+    header("Sandboxed Execution — PIC carrying PIC (outer ENFORCE lineage)");
     println!("{}", paint(C_DIM, &wrap(&res.description, 96)));
     println!(
         "\npolicy {}: {} iff {}",
@@ -32,9 +35,9 @@ pub(crate) fn run_guardrail(now: DateTime<Utc>, o: &Opts) -> Result<(), String> 
     );
 
     println!();
-    render_participants(&res.permit);
+    render_carried(&res.permit);
     render_mle_box(&res.permit);
-    render_sandbox_arrow(&res.permit);
+    render_origin_arrow(&res.origin);
     render_guardrail_box(&res.permit, true);
     render_receiver(&res.receiver);
 
@@ -47,21 +50,21 @@ pub(crate) fn run_guardrail(now: DateTime<Utc>, o: &Opts) -> Result<(), String> 
     render_guardrail_box(&res.deny, false);
 
     println!(
-        "\n{} invalid-PCA case — {}",
+        "\n{} invalid carried-lineage case — {}",
         paint(C_BOLD, "▶"),
         res.invalid_pca.name
     );
     render_guardrail_box(&res.invalid_pca, false);
 
     println!();
-    println!("{}", paint(C_DIM, "inspect the real signed artifacts: picdemo dump --guardrail            (everything)"));
-    println!("{}", paint(C_DIM, "                                   picdemo dump --guardrail guard      (guardrail envelope)"));
-    println!("{}", paint(C_DIM, "                                   picdemo dump --guardrail pdp policy  (PDP exchange + policy)"));
+    println!("{}", paint(C_DIM, "explore the execution:  picdemo exec                     (compact hop view)"));
+    println!("{}", paint(C_DIM, "                        picdemo exec --lineage all --pca  (every lineage, full PCAs)"));
+    println!("{}", paint(C_DIM, "inspect real artifacts: picdemo dump --guardrail          (multiLineage, outer PCA, accept)"));
     Ok(())
 }
 
-fn render_participants(out: &CrossingOutcome) {
-    for tp in &out.trace.participants {
+fn render_carried(out: &CrossingOutcome) {
+    for tp in &out.trace.carried_lineages {
         let issuer = out
             .mle
             .participants
@@ -72,7 +75,7 @@ fn render_participants(out: &CrossingOutcome) {
         println!(
             "{} {}  {}",
             paint(C_CYAN, "●"),
-            paint(C_BOLD, &format!("Lineage Execution {}", tp.label)),
+            paint(C_BOLD, &format!("carried lineage {}", tp.label)),
             paint(C_DIM, &format!("origin {issuer}, {} PCAs", tp.chain_len))
         );
         println!(
@@ -113,44 +116,42 @@ fn render_mle_box(out: &CrossingOutcome) {
     }
     println!(
         "│   {}",
-        paint(C_DIM, "authorities remain separate; never merged")
+        paint(C_DIM, "carried lineages remain independent; authorities never merged")
     );
     println!("└{}", "─".repeat(68));
 }
 
-fn render_sandbox_arrow(out: &CrossingOutcome) {
+fn render_origin_arrow(origin: &Pca) {
     println!("        {}", paint(C_DIM, "│"));
     println!(
-        "        {} {} captures the crossing",
-        paint(C_CYAN, "│ sandbox"),
-        paint(C_ACTOR, &out.trace.forwarded_by)
+        "        {} {} originates the outer ENFORCE lineage {}",
+        paint(C_CYAN, "│ sandbox origin"),
+        paint(C_ACTOR, &origin.issuer),
+        paint(C_DIM, "(PCA0-G, authority { ENFORCE })")
     );
-    if let Some(env) = &out.envelope {
-        println!(
-            "        {}",
-            paint(
-                C_DIM,
-                &format!(
-                    "│   forwardingProof signed by {}",
-                    env.forwarding_proof.verification_method
-                )
-            )
-        );
-    }
     println!("        {}", paint(C_CYAN, "▼"));
 }
 
 fn render_guardrail_box(out: &CrossingOutcome, full: bool) {
     let t = &out.trace;
     println!(
-        "┌ {} {}",
-        paint(C_BOLD, "EXECUTION GUARDRAIL"),
-        paint(C_ACTOR, "did:web:guardrail.example")
+        "┌ {} {}{}",
+        paint(C_BOLD, "GUARDRAIL"),
+        paint(C_ACTOR, &t.guardrail_executor),
+        paint(C_DIM, " — ordinary executor of the outer ENFORCE lineage")
     );
 
-    // 1. validate
+    // 1. validate outer
+    println!(
+        "│ 1 outer      {} continue PCA{}-G → PCA{}-G",
+        verdict(t.outer_valid, &paint(C_GREEN, "✔"), &paint(C_REJECT, "✗")),
+        t.outer_predecessor,
+        t.outer_predecessor + 1
+    );
+
+    // 2. validate carried lineages
     let parts: Vec<String> = t
-        .participants
+        .carried_lineages
         .iter()
         .map(|tp| {
             let mark = if tp.valid {
@@ -161,8 +162,8 @@ fn render_guardrail_box(out: &CrossingOutcome, full: bool) {
             format!("{} {} ({} PCAs)", tp.label, mark, tp.chain_len)
         })
         .collect();
-    println!("│ 1 validate   {}", parts.join("   "));
-    for tp in &t.participants {
+    println!("│ 2 carried    {}", parts.join("   "));
+    for tp in &t.carried_lineages {
         if !tp.valid {
             println!(
                 "│              {}",
@@ -171,7 +172,7 @@ fn render_guardrail_box(out: &CrossingOutcome, full: bool) {
         }
     }
 
-    // 2. evaluate
+    // 3. evaluate
     if t.pdp_called {
         let req = t.pdp_request.as_ref().expect("pdp request present");
         let ins: Vec<String> = req
@@ -180,74 +181,71 @@ fn render_guardrail_box(out: &CrossingOutcome, full: bool) {
             .map(|p| format!("{}{}", p.label, go_list(&p.scopes)))
             .collect();
         println!(
-            "│ 2 evaluate   PDP ← participants {}  destination {}",
+            "│ 3 evaluate   enforcement fn ← {}  destination {}",
             paint(C_YELLOW, &ins.join(" ")),
             req.destination
         );
         println!(
-            "│              PDP → {} — {}",
+            "│              → {} — {}",
             decision(&t.decision.effect),
             t.decision.reason
         );
     } else {
         println!(
-            "│ 2 evaluate   {}",
-            paint(C_DIM, "skipped — deny enforced without evaluating policy")
+            "│ 3 evaluate   {}",
+            paint(C_DIM, "skipped — deny before policy evaluation")
         );
     }
 
-    // 3. enforce
-    if let Some(env) = &out.envelope {
+    // 4. prove / deny
+    if t.enforced == "permit" {
         println!(
-            "│ 3 enforce    {} → guardrailProof signed by {}",
+            "│ 4 prove      {} → signs PCA{}-G  request.enforcementResult=permit",
             decision("permit"),
-            env.guardrail_proof.verification_method
+            t.outer_counter
         );
         println!(
             "│              {}",
             paint(
                 C_DIM,
-                &format!(
-                    "covers forwardingProofDigest {}",
-                    short_hash(&env.guardrail_proof.forwarding_proof_digest)
-                )
+                &format!("request.multiLineageDigest {}", short_hash(&t.multi_lineage_digest))
             )
         );
     } else {
         println!(
-            "│ 3 enforce    {} — crossing blocked, no envelope issued",
+            "│ 4 prove      {} — no authorizing continuation produced",
             decision("deny")
         );
     }
     println!("└{}", "─".repeat(68));
 
-    if full && out.envelope.is_some() {
+    if full && t.enforced == "permit" {
         println!(
             "        {}  {}",
             paint(C_CYAN, "▼"),
             paint(
                 C_DIM,
-                "guardrail forwarding envelope (replaces the ordinary envelope; never nested)"
+                "the outer PCA (PCA1-G) is the guardrail decision; no separate envelope, no second signature"
             )
         );
     }
 }
 
 pub(crate) fn render_receiver(rc: &ReceiverChecks) {
-    println!("\n{} receiving hop in sandbox mode", paint(C_BOLD, "▶"));
+    println!("\n{} receiving hop — enforced acceptance", paint(C_BOLD, "▶"));
     println!(
-        "  envelope              {}",
+        "  outer PCA             {}",
         verdict(
-            rc.envelope_accepted,
+            rc.accepted,
             &paint(
                 C_GREEN,
-                "ACCEPTED — both proofs verify, digests recomputed, freshness ok"
+                "ACCEPTED — outer PIC valid, origin authorized, ENFORCE, multiLineageDigest ok, permit, fresh"
             ),
-            &paint(C_REJECT, &format!("rejected: {}", rc.envelope_err))
+            &paint(C_REJECT, &format!("rejected: {}", rc.accept_err))
         )
     );
     println!(
-        "  bypass (no envelope)  {}",
+        "  bypass (no outer PCA) {}",
         verdict(
             rc.bypass_rejected,
             &paint(C_REJECT, "REJECTED"),
@@ -256,7 +254,7 @@ pub(crate) fn render_receiver(rc: &ReceiverChecks) {
     );
     println!("                        {}", paint(C_DIM, &rc.bypass_reason));
     println!(
-        "  tampered destination  {}",
+        "  tampered carried set  {}",
         verdict(
             rc.tamper_rejected,
             &paint(C_REJECT, "REJECTED"),
@@ -279,36 +277,36 @@ pub(crate) fn render_tip_guard(
         "\n{}",
         paint(
             C_BOLD,
-            "── guarded (--guardrail): the scenario's tip crossing goes through sandbox + guardrail ──"
+            "── sandboxed (--guardrail): the scenario's tip crossing goes through an outer ENFORCE lineage ──"
         )
     );
     let ins: Vec<String> = t
-        .participants
+        .carried_lineages
         .iter()
         .map(|tp| format!("{}{}", tp.label, go_list(&tp.scopes)))
         .collect();
     println!(
-        "  participants {} → {}",
+        "  carried lineages {} → {}",
         paint(C_YELLOW, &ins.join(" + ")),
         destination
     );
     println!(
-        "  sandbox {} → forwardingProof {}   guardrail: validate {}, PDP {}, guardrailProof {}",
-        t.forwarded_by,
-        paint(C_GREEN, "✔"),
-        verdict(t.pcas_valid, &paint(C_GREEN, "✔"), &paint(C_REJECT, "✗")),
+        "  guardrail {}: outer {}, carried {}, evaluate {}, prove {}",
+        t.guardrail_executor,
+        verdict(t.outer_valid, &paint(C_GREEN, "✔"), &paint(C_REJECT, "✗")),
+        verdict(t.carried_valid, &paint(C_GREEN, "✔"), &paint(C_REJECT, "✗")),
         decision(&t.decision.effect),
         verdict(
-            out.envelope.is_some(),
-            &paint(C_GREEN, "✔ signed"),
-            &paint(C_DIM, "not issued")
+            t.enforced == "permit",
+            &paint(C_GREEN, "✔ PCA1-G signed"),
+            &paint(C_DIM, "not produced")
         )
     );
-    if out.envelope.is_some() {
+    if t.enforced == "permit" {
         println!(
-            "  receiver: envelope {}   bypass {}",
+            "  receiver: outer PCA {}   bypass {}",
             verdict(
-                rc.envelope_accepted,
+                rc.accepted,
                 &paint(C_GREEN, "ACCEPTED"),
                 &paint(C_REJECT, "rejected")
             ),
@@ -340,7 +338,7 @@ pub(crate) fn go_list(v: &[String]) -> String {
     format!("[{}]", v.join(" "))
 }
 
-fn short_hash(h: &str) -> String {
+pub(crate) fn short_hash(h: &str) -> String {
     if h.len() <= 21 {
         h.to_string()
     } else {

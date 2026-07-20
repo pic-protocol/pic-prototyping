@@ -3,15 +3,17 @@
 // Based on the Provenance Identity Continuity (PIC) Model created by Nicola Gallo.
 // Conforms to the PIC Specification published and maintained by Nitro Agility S.r.l.
 
-//! The canonical guarded crossing of the PIC Execution Guardrail spec: the AI
-//! agent holds the user's Lineage Execution A, mints its own Lineage Execution
-//! B, and proposes the S3 write as one Multi-Lineage Execution. Mirror of the
-//! Go `scenario/guardrail.go`.
+//! The canonical Sandboxed Execution of the PIC Sandboxed Execution Specification
+//! (PIC of PIC): an authorized sandbox origin originates the outer ENFORCE
+//! lineage; the AI agent holds the user's Lineage Execution A and its own
+//! Lineage Execution B, proposed together as one Multi-Lineage Execution; the
+//! guardrail — an ordinary executor of the outer lineage — validates, evaluates,
+//! and on permit proves the next outer PCA. Mirror of Go `scenario/guardrail.go`.
 
 use super::World;
-use crate::guardrail::{
-    verify_guardrail_envelope, EnforcementTrace, Guardrail, GuardrailEnvelope, LocalPdp,
-    MultiLineageExecution, Participant, Sandbox,
+use crate::sandboxed::{
+    accept_guarded_crossing, EnforcementTrace, Guardrail, LocalPdp, MultiLineageExecution,
+    Participant, SandboxedExecution,
 };
 use crate::types::{Attestation, ExecutionContract, Invariants, Pca, Request};
 use crate::{mint_pca0, Identity, PicResult, Prover};
@@ -24,27 +26,29 @@ pub const GRANT_USER_BACKUP: &str = "urn:pic:grant:user-backup";
 pub const GRANT_AGENT_S3_WRITER: &str = "urn:pic:grant:agent-s3-writer";
 pub const GRANT_EXTERNAL_SHARING: &str = "urn:pic:grant:external-sharing";
 
-/// One guarded crossing: the Multi-Lineage Execution presented, the guardrail's
-/// enforcement trace, and the envelope (on permit).
+/// One guarded crossing: the input Multi-Lineage Execution, the guardrail's
+/// enforcement trace, and (on permit) the outer ENFORCE lineage chain.
 #[derive(Serialize)]
 pub struct CrossingOutcome {
     pub name: String,
     #[serde(rename = "multiLineageExecution")]
     pub mle: MultiLineageExecution,
     pub trace: EnforcementTrace,
-    #[serde(rename = "guardrailEnvelope", skip_serializing_if = "Option::is_none")]
-    pub envelope: Option<GuardrailEnvelope>,
+    #[serde(rename = "outerChain", skip_serializing_if = "Vec::is_empty")]
+    pub outer_chain: Vec<Pca>,
+    #[serde(rename = "outerPca", skip_serializing_if = "Option::is_none")]
+    pub outer_pca: Option<Pca>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub error: String,
 }
 
-/// What a receiving hop in sandbox mode does with the permitted crossing.
+/// What a receiving hop does with the permitted crossing, under enforced
+/// acceptance.
 #[derive(Default, Serialize)]
 pub struct ReceiverChecks {
-    #[serde(rename = "envelopeAccepted")]
-    pub envelope_accepted: bool,
-    #[serde(rename = "envelopeError", skip_serializing_if = "String::is_empty")]
-    pub envelope_err: String,
+    pub accepted: bool,
+    #[serde(rename = "acceptError", skip_serializing_if = "String::is_empty")]
+    pub accept_err: String,
     #[serde(rename = "bypassRejected")]
     pub bypass_rejected: bool,
     #[serde(rename = "bypassReason")]
@@ -55,10 +59,12 @@ pub struct ReceiverChecks {
     pub tamper_reason: String,
 }
 
-/// The full canonical guarded-crossing scenario.
+/// The full canonical Sandboxed Execution scenario.
 #[derive(Serialize)]
 pub struct GuardedResult {
     pub description: String,
+    #[serde(rename = "originPca0G")]
+    pub origin: Pca,
     pub policy: crate::Policy,
     #[serde(rename = "scopeBindings")]
     pub scopes: HashMap<String, Vec<String>>,
@@ -70,30 +76,30 @@ pub struct GuardedResult {
 }
 
 impl World {
-    /// The recognized guardrail authorities a receiving hop accepts.
-    pub fn recognized_guardrails(&self) -> Vec<String> {
-        vec![self.id("guardrail").verification_method.clone()]
+    /// The authorized sandbox origins a receiving hop accepts.
+    pub fn accepted_origins(&self) -> Vec<String> {
+        vec![self.id("enforcement-origin").id.clone()]
     }
 
-    /// Runs the canonical example end to end. Every PCA, proof, and envelope is
-    /// really minted, signed, and verified on this call.
+    /// Runs the canonical example end to end.
     pub fn guarded(&self, now: DateTime<Utc>) -> PicResult<GuardedResult> {
         let pdp = LocalPdp {
             policy: self.set.policy.clone(),
         };
         let guardrail = Guardrail::new(
             self.id("guardrail"),
+            self.att("guardrail"),
             &self.set.registry,
             &pdp,
+            self.set.policy.clone(),
             &self.set.scopes,
         );
-        let sandbox = Sandbox::new(self.id("sandbox"), &guardrail);
-        let agent = self.id("summary-service"); // the AI agent (agentic executor)
+        let origin = self.id("enforcement-origin");
+        let agent = self.id("summary-service");
         let agent_att = self.att("summary-service");
         let contract = ExecutionContract::default();
 
-        // Lineage Execution A — user authority: alice grants {read-all, backup};
-        // the agent receives PCA1-A {backup} through a real PoR hop.
+        // Carried lineage A — user authority.
         let pca0_a = mint_pca0(
             self.id("alice"),
             Invariants {
@@ -119,7 +125,6 @@ impl World {
         )?;
         let chain_a = vec![pca0_a, pca1_a];
 
-        // Lineage Execution B — agent authority for the S3 write.
         let dest = "s3://backups/tenant-42";
         let chain_b = self.agent_lineage(
             agent,
@@ -135,31 +140,28 @@ impl World {
             now,
         )?;
 
-        // Crossing 1 — PERMIT: A + B satisfy the policy.
+        // Crossing 1 — PERMIT.
+        let mut se_permit = SandboxedExecution::originate(origin, now);
+        let origin_pca = se_permit.origin().clone();
         let mle = MultiLineageExecution {
             participants: vec![
-                Participant {
-                    label: "A".into(),
-                    chain: chain_a.clone(),
-                },
-                Participant {
-                    label: "B".into(),
-                    chain: chain_b.clone(),
-                },
+                participant("A", chain_a.clone(), "user-backup"),
+                participant("B", chain_b.clone(), "agent-s3-writer"),
             ],
             proposing: "B".into(),
             destination: dest.into(),
         };
-        let (env, trace) = sandbox.cross(&mle, now)?;
+        let (outer, trace) = guardrail.enforce(&mut se_permit, &mle, now);
         let permit = CrossingOutcome {
             name: "A+B write to S3".into(),
             mle,
-            error: err_of(&trace, env.is_some()),
+            error: err_of(&trace, outer.is_some()),
+            outer_chain: se_permit.chain.clone(),
+            outer_pca: outer,
             trace,
-            envelope: env,
         };
 
-        // Crossing 2 — DENY: A + C (external-sharing) fails the policy.
+        // Crossing 2 — DENY: A + C (external-sharing).
         let chain_c = self.agent_lineage(
             agent,
             &agent_att,
@@ -173,30 +175,26 @@ impl World {
             },
             now,
         )?;
+        let mut se_deny = SandboxedExecution::originate(origin, now);
         let mle_deny = MultiLineageExecution {
             participants: vec![
-                Participant {
-                    label: "A".into(),
-                    chain: chain_a.clone(),
-                },
-                Participant {
-                    label: "C".into(),
-                    chain: chain_c,
-                },
+                participant("A", chain_a.clone(), "user-backup"),
+                participant("C", chain_c, "external-sharing"),
             ],
             proposing: "C".into(),
             destination: "https://public.example/share".into(),
         };
-        let (env_deny, trace_deny) = sandbox.cross(&mle_deny, now)?;
+        let (outer_deny, trace_deny) = guardrail.enforce(&mut se_deny, &mle_deny, now);
         let deny = CrossingOutcome {
             name: "A+C public share".into(),
             mle: mle_deny,
-            error: err_of(&trace_deny, env_deny.is_some()),
+            error: err_of(&trace_deny, outer_deny.is_some()),
+            outer_chain: Vec::new(),
+            outer_pca: outer_deny,
             trace: trace_deny,
-            envelope: env_deny,
         };
 
-        // Crossing 3 — INVALID PCA: a maliciously expanded successor in B'.
+        // Crossing 3 — INVALID carried lineage: a maliciously expanded B'.
         let rogue = Prover::new(agent, agent_att.clone()).continue_malicious(
             &chain_b[0],
             Invariants {
@@ -211,32 +209,29 @@ impl World {
             },
             now,
         )?;
+        let mut se_bad = SandboxedExecution::originate(origin, now);
         let mle_bad = MultiLineageExecution {
             participants: vec![
-                Participant {
-                    label: "A".into(),
-                    chain: chain_a,
-                },
-                Participant {
-                    label: "B'".into(),
-                    chain: vec![chain_b[0].clone(), rogue],
-                },
+                participant("A", chain_a, "user-backup"),
+                participant("B'", vec![chain_b[0].clone(), rogue], "agent-s3-writer"),
             ],
             proposing: "B'".into(),
             destination: dest.into(),
         };
-        let (env_bad, trace_bad) = sandbox.cross(&mle_bad, now)?;
+        let (outer_bad, trace_bad) = guardrail.enforce(&mut se_bad, &mle_bad, now);
         let invalid_pca = CrossingOutcome {
             name: "A+B' expanded authority".into(),
             mle: mle_bad,
-            error: err_of(&trace_bad, env_bad.is_some()),
+            error: err_of(&trace_bad, outer_bad.is_some()),
+            outer_chain: Vec::new(),
+            outer_pca: outer_bad,
             trace: trace_bad,
-            envelope: env_bad,
         };
 
-        let receiver = self.receiver_checks(permit.envelope.as_ref(), now);
+        let receiver = self.receiver_checks(&permit.outer_chain, now);
         Ok(GuardedResult {
-            description: "Canonical guarded crossing (Execution Guardrail spec): the AI agent holds the user's Lineage Execution A and its own Lineage Execution B, and proposes the S3 write as one Multi-Lineage Execution. The sandbox presents the crossing (forwardingProof); the guardrail validates every PCA, evaluates the policy over the semantic scopes via the simulated PDP, and enforces permit or deny (guardrailProof). Authorities remain separate; nothing is merged.".into(),
+            description: "Canonical Sandboxed Execution (PIC of PIC): an authorized sandbox origin originates the outer ENFORCE lineage (PCA0-G). The AI agent holds the user's Lineage Execution A and its own Lineage Execution B and proposes the S3 write as one Multi-Lineage Execution. The guardrail — an ordinary executor of the outer lineage — validates every carried lineage, evaluates the enforcement function, and on permit proves the next ordinary outer PCA (PCA1-G) carrying the signed multiLineage. Authorities remain separate; nothing is merged.".into(),
+            origin: origin_pca,
             policy: self.set.policy.clone(),
             scopes: self.set.scopes.clone(),
             permit,
@@ -257,47 +252,45 @@ impl World {
         req: Request,
         now: DateTime<Utc>,
     ) -> PicResult<Vec<Pca>> {
-        let contract = ExecutionContract::default();
         let inv = Invariants {
             operations: ops.iter().map(|s| s.to_string()).collect(),
-            execution_contract: contract,
+            execution_contract: ExecutionContract::default(),
         };
         let pca0 = mint_pca0(agent, inv.clone(), grant, now);
         let pca1 = Prover::new(agent, att.clone()).continue_(&pca0, inv, req, now)?;
         Ok(vec![pca0, pca1])
     }
 
-    /// Sandbox-mode acceptance checks: accept the permitted envelope, reject a
-    /// bypass, reject a tampered copy.
-    pub fn receiver_checks(
-        &self,
-        env: Option<&GuardrailEnvelope>,
-        now: DateTime<Utc>,
-    ) -> ReceiverChecks {
+    /// Enforced acceptance of a permitted outer chain, plus bypass and tamper
+    /// rejections.
+    pub fn receiver_checks(&self, outer_chain: &[Pca], now: DateTime<Utc>) -> ReceiverChecks {
         let mut rc = ReceiverChecks::default();
-        let recognized = self.recognized_guardrails();
+        let origins = self.accepted_origins();
 
-        let verr = verify_guardrail_envelope(&self.set.registry, &recognized, env, now);
-        rc.envelope_accepted = env.is_some() && verr.is_ok();
-        rc.envelope_err = verr.err().unwrap_or_default();
+        let verr = accept_guarded_crossing(&self.set.registry, None, &origins, outer_chain, now);
+        rc.accepted = !outer_chain.is_empty() && verr.is_ok();
+        rc.accept_err = verr.err().unwrap_or_default();
 
-        let berr = verify_guardrail_envelope(&self.set.registry, &recognized, None, now);
+        let berr = accept_guarded_crossing(&self.set.registry, None, &origins, &[], now);
         rc.bypass_rejected = berr.is_err();
         rc.bypass_reason = berr.err().unwrap_or_default();
 
-        if let Some(env) = env {
-            let mut tampered = env.clone();
-            tampered.envelope.crossing_context.destination = "s3://attacker/exfil".into();
-            let terr =
-                verify_guardrail_envelope(&self.set.registry, &recognized, Some(&tampered), now);
+        if !outer_chain.is_empty() {
+            let mut tampered = outer_chain.to_vec();
+            if let Some(tip) = tampered.last_mut() {
+                if let Some(ml) = tip.multi_lineage.as_mut() {
+                    ml.context.destination = "s3://attacker/exfil".into();
+                }
+            }
+            let terr = accept_guarded_crossing(&self.set.registry, None, &origins, &tampered, now);
             rc.tamper_rejected = terr.is_err();
             rc.tamper_reason = terr.err().unwrap_or_default();
         }
         rc
     }
 
-    /// Carries an existing chain as Lineage Execution A through the guarded
-    /// pipeline (the shared `--guardrail` augmentation).
+    /// Carries an existing chain as carried lineage A through a Sandboxed
+    /// Execution (the shared `--guardrail` augmentation).
     pub fn guard_tip(
         &self,
         chain: Vec<Pca>,
@@ -309,11 +302,12 @@ impl World {
         };
         let guardrail = Guardrail::new(
             self.id("guardrail"),
+            self.att("guardrail"),
             &self.set.registry,
             &pdp,
+            self.set.policy.clone(),
             &self.set.scopes,
         );
-        let sandbox = Sandbox::new(self.id("sandbox"), &guardrail);
         let agent = self.id("summary-service");
         let chain_b = self.agent_lineage(
             agent,
@@ -328,34 +322,38 @@ impl World {
             },
             now,
         )?;
+        let mut se = SandboxedExecution::originate(self.id("enforcement-origin"), now);
         let mle = MultiLineageExecution {
             participants: vec![
-                Participant {
-                    label: "A".into(),
-                    chain,
-                },
-                Participant {
-                    label: "B".into(),
-                    chain: chain_b,
-                },
+                participant("A", chain, "user-backup"),
+                participant("B", chain_b, "agent-s3-writer"),
             ],
             proposing: "B".into(),
             destination: destination.into(),
         };
-        let (env, trace) = sandbox.cross(&mle, now)?;
-        let rc = if env.is_some() {
-            self.receiver_checks(env.as_ref(), now)
+        let (outer, trace) = guardrail.enforce(&mut se, &mle, now);
+        let rc = if outer.is_some() {
+            self.receiver_checks(&se.chain, now)
         } else {
             ReceiverChecks::default()
         };
         let out = CrossingOutcome {
             name: "tip crossing".into(),
             mle,
-            error: err_of(&trace, env.is_some()),
+            error: err_of(&trace, outer.is_some()),
+            outer_chain: se.chain.clone(),
+            outer_pca: outer,
             trace,
-            envelope: env,
         };
         Ok((out, rc))
+    }
+}
+
+fn participant(label: &str, chain: Vec<Pca>, role: &str) -> Participant {
+    Participant {
+        label: label.into(),
+        chain,
+        role: role.into(),
     }
 }
 

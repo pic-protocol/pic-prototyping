@@ -48,15 +48,18 @@ attestations, loaded once into memory (see [Fixtures](#fixtures)).
    demo prints both timings side by side.
 4. **Revocation**: a `LINEAGE-SUFFIX(lineageId, fromCounter)` cutoff rejects a
    hop and everything causally after it, while earlier hops stay valid.
-5. **Execution Guardrail** (`guardrail`, or `--guardrail` on any scenario): the
-   canonical guarded crossing of the PIC Execution Guardrail spec. An AI agent
-   holds the user's Lineage Execution A and its own Lineage Execution B, and
-   proposes the S3 write as one **Multi-Lineage Execution**; the **sandbox**
-   presents the crossing (`forwardingProof`), the **guardrail** validates every
-   PCA, evaluates the fixture policy over the **semantic scopes** through a
-   simulated PDP, and enforces permit or deny, signing the guardrail forwarding
-   envelope (`guardrailProof`). Deny (wrong scopes), invalid-PCA (deny without
-   evaluating policy), bypass, and tamper cases are all shown live.
+5. **Sandboxed Execution** (`guardrail`/`exec`, or `--guardrail` on any scenario):
+   the canonical **PIC-of-PIC** construction of the PIC Sandboxed Execution spec.
+   An authorized sandbox origin originates an **outer ENFORCE lineage** (`PCA0-G`);
+   an AI agent holds the user's Lineage Execution A and its own Lineage Execution
+   B and proposes the S3 write as one **Multi-Lineage Execution**. The
+   **guardrail** — an ordinary executor of the outer lineage — validates every
+   carried lineage, evaluates the fixture policy over the **semantic scopes**
+   through a simulated PDP (the enforcement function), and on permit proves the
+   next ordinary outer PCA (`PCA1-G`) carrying the signed `multiLineage` field and
+   `enforcementResult`. There is no sandbox primitive and no envelope: the outer
+   PCA *is* the decision. Deny, invalid-carried-lineage, bypass, and tamper cases
+   are all shown live, and a receiving hop runs **enforced acceptance**.
 
 ## Requirements
 
@@ -80,23 +83,29 @@ go run ./cmd/picdemo flow --only-json | jq      # the whole flow as one JSON
 go run ./cmd/picdemo bench
 go run ./cmd/picdemo bench --only-json | jq
 
+# explore a Sandboxed Execution (guardrail on by default)
+go run ./cmd/picdemo exec                        # compact hop diagram: PIC carrying PIC
+go run ./cmd/picdemo exec A                       # drill into one carried lineage (or B, outer, all)
+go run ./cmd/picdemo exec all --pca               # every lineage, full signed PCAs per hop
+go run ./cmd/picdemo exec --no-guardrail          # debug: inner lineages only, no outer ENFORCE lineage
+
 # inspect real signed artifacts + a live tamper proof
 go run ./cmd/picdemo dump                        # human-readable
 go run ./cmd/picdemo dump --only-json | jq       # one JSON document
 go run ./cmd/picdemo dump hop1                   # only one artifact (pca0|hop0, pca1|hop1, envelope)
 
-# Execution Guardrail (sandbox + guardrail + simulated PDP over the fixture policy)
-go run ./cmd/picdemo guardrail                   # canonical guarded crossing: permit, deny, invalid-PCA
-go run ./cmd/picdemo all --guardrail             # every scenario, tip crossing routed through the guardrail
-go run ./cmd/picdemo flow --guardrail            # the flow's chain crosses the guarded boundary
-go run ./cmd/picdemo bench --guardrail           # + guarded-crossing timings, decomposed per component
+# Sandboxed Execution (outer ENFORCE lineage + guardrail + simulated PDP over the fixture policy)
+go run ./cmd/picdemo guardrail                   # canonical Sandboxed Execution: permit, deny, invalid
+go run ./cmd/picdemo all --guardrail             # every scenario, tip crossing through a Sandboxed Execution
+go run ./cmd/picdemo flow --guardrail            # the flow's chain crosses a Sandboxed Execution
+go run ./cmd/picdemo bench --guardrail           # + sandboxed-crossing timings, decomposed per phase
 
-# guardrail artifacts (add selectors to filter)
-go run ./cmd/picdemo dump --guardrail            # everything, incl. policy, scopes, MLE, PDP, envelope
+# sandboxed-execution artifacts (add selectors to filter)
+go run ./cmd/picdemo dump --guardrail            # everything, incl. policy, scopes, multiLineage, outer PCA
 go run ./cmd/picdemo dump --guardrail policy scopes   # the policy + the scope bindings
-go run ./cmd/picdemo dump --guardrail pdp             # PDP exchange: request -> decision (with reason)
-go run ./cmd/picdemo dump --guardrail guard           # the signed guardrail forwarding envelope
-go run ./cmd/picdemo dump --guardrail denytrace       # the deny case (external-sharing participant)
+go run ./cmd/picdemo dump --guardrail pdp             # enforcement-function exchange: request -> decision
+go run ./cmd/picdemo dump --guardrail outer multilineage   # the outer ENFORCE lineage + signed multiLineage
+go run ./cmd/picdemo dump --guardrail accept denytrace     # enforced-acceptance checks + the deny case
 ```
 
 Or via [Task](https://taskfile.dev) from the repository root:
@@ -135,13 +144,13 @@ v0.2/golang
 │   ├── verifier.go         # Verifier: origin + per-hop checks (Prover/Verifier spec §3.3)
 │   ├── snapshot.go         # Snapshot Hash Chain profile (§5.2)
 │   ├── revocation.go       # lineageId derivation, LINEAGE-SUFFIX store and check
-│   ├── guardrail.go        # Execution Guardrail: MLE, scopes, PDP, sandbox, guardrail envelope
+│   ├── sandboxed.go        # Sandboxed Execution (PIC of PIC): outer ENFORCE lineage, multiLineage, guardrail, enforced acceptance
 │   ├── pic_test.go         # unit tests
 │   └── bench_test.go       # benchmarks
 └── scenario/               # the Why-PIC use cases, on the fixtures
     ├── authoritymixing.go  # cross-lineage composition (Why PIC; §1.4)
     ├── confuseddeputy.go   # cross-service confused deputy + chain builder
-    └── guardrail.go        # canonical guarded crossing (permit / deny / invalid PCA)
+    └── guardrail.go        # canonical Sandboxed Execution (permit / deny / invalid carried lineage)
 ```
 
 ## Fixtures

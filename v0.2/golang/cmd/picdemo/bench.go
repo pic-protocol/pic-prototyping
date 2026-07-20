@@ -119,16 +119,18 @@ func runBench(now time.Time, o opts) error {
 	return nil
 }
 
-// benchGuardrail measures the guarded crossing on the canonical A+B example:
-// each component alone, then the whole pipeline end to end.
+// benchGuardrail measures the Sandboxed Execution on the canonical A+B example:
+// each guardrail phase alone, then the whole pipeline end to end.
 func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
-	sandbox, guard := w.GuardrailSetup()
+	guard := w.Guardrail()
 	reg := w.Set.Registry
+	origins := w.AcceptedOrigins()
+	origin := w.EnforcementOrigin()
 	contract := pic.ExecutionContract{}
 	agent := w.Set.Identity("summary-service")
 	agentAtt := w.Set.Attestation("summary-service")
 
-	// Lineage Execution A: alice → agent.
+	// Carried lineage A: alice → agent.
 	pca0A, err := pic.MintPCA0(w.Set.Identity("alice"),
 		pic.Invariants{Operations: []string{"read-all", "backup"}, ExecutionContract: contract},
 		scenario.GrantUserBackup, now)
@@ -141,7 +143,7 @@ func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	// Lineage Execution B: the agent's own origin + signed write request.
+	// Carried lineage B: the agent's own origin + signed write request.
 	pca0B, err := pic.MintPCA0(agent,
 		pic.Invariants{Operations: []string{"write:s3/backups/*"}, ExecutionContract: contract},
 		scenario.GrantAgentS3Writer, now)
@@ -156,22 +158,22 @@ func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
 	}
 	mle := &pic.MultiLineageExecution{
 		Participants: []pic.Participant{
-			{Label: "A", Chain: []*pic.PCA{pca0A, pca1A}},
-			{Label: "B", Chain: []*pic.PCA{pca0B, pca1B}},
+			{Label: "A", Chain: []*pic.PCA{pca0A, pca1A}, Role: "user-backup"},
+			{Label: "B", Chain: []*pic.PCA{pca0B, pca1B}, Role: "agent-s3-writer"},
 		},
 		Proposing:   "B",
 		Destination: "s3://backups/tenant-42",
 	}
 
-	pres, err := sandbox.Present(mle, now)
+	// One reference crossing for the accept benchmark and the size figure.
+	seRef, err := pic.Originate(origin, now)
 	if err != nil {
 		return nil, 0, err
 	}
-	env, trace, err := guard.Enforce(pres, now)
+	outer, trace, err := guard.Enforce(seRef, mle, now)
 	if err != nil {
 		return nil, 0, err
 	}
-	recognized := w.RecognizedGuardrails()
 	pdp := &pic.LocalPDP{Policy: w.Set.Policy}
 	req := *trace.PDPRequest
 
@@ -179,16 +181,20 @@ func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
 		name string
 		fn   func()
 	}{
-		{"sandbox: present (forwardingProof)", func() { _, _ = sandbox.Present(mle, now) }},
-		{"guardrail: validate participants", func() {
+		{"origin: mint PCA0-G", func() { _, _ = pic.Originate(origin, now) }},
+		{"guardrail: validate carried lineages", func() {
 			for _, p := range mle.Participants {
 				_, _ = pic.NewVerifier(reg, nil).VerifyFullChain(p.Chain, now)
 			}
 		}},
-		{"guardrail: PDP evaluate", func() { _ = pdp.Evaluate(req) }},
-		{"guardrail: enforce (3 steps)", func() { _, _, _ = guard.Enforce(pres, now) }},
-		{"receiver: verify envelope", func() { _ = pic.VerifyGuardrailEnvelope(reg, recognized, env, now) }},
-		{"guarded crossing end to end", func() { _, _, _ = sandbox.Cross(mle, now) }},
+		{"guardrail: enforcement fn evaluate", func() { _ = pdp.Evaluate(req) }},
+		{"guardrail: enforce (prove PCA1-G)", func() { se, _ := pic.Originate(origin, now); _, _, _ = guard.Enforce(se, mle, now) }},
+		{"receiver: accept outer PCA", func() { _ = pic.AcceptGuardedCrossing(reg, nil, origins, seRef.Chain, now) }},
+		{"sandboxed crossing end to end", func() {
+			se, _ := pic.Originate(origin, now)
+			_, _, _ = guard.Enforce(se, mle, now)
+			_ = pic.AcceptGuardedCrossing(reg, nil, origins, se.Chain, now)
+		}},
 	}
 	rows := make([]benchRow, len(cases))
 	for i, c := range cases {
@@ -196,15 +202,15 @@ func benchGuardrail(w *scenario.World, now time.Time) ([]benchRow, int, error) {
 		ns := float64(per.Nanoseconds())
 		rows[i] = benchRow{Name: c.name, Iters: iters, NsPerOp: ns, OpsPerSec: 1e9 / ns}
 	}
-	return rows, jsonLen(env), nil
+	return rows, jsonLen(outer), nil
 }
 
 // renderGuardBench prints the guarded-crossing table plus the decomposition of
 // the end-to-end cost into its components.
 func renderGuardBench(rows []benchRow, envSize int) {
 	fmt.Println()
-	fmt.Println("  " + paint(cBold, "guarded crossing (--guardrail)") +
-		paint(cDim, "  sandbox → guardrail (validate → PDP → sign) → receiver"))
+	fmt.Println("  " + paint(cBold, "sandboxed crossing (--guardrail)") +
+		paint(cDim, "  originate → guardrail (validate → evaluate → prove) → accept"))
 	fmt.Println("  " + paint(cDim, strings.Repeat("─", 74)))
 
 	maxNs := 0.0
@@ -233,45 +239,47 @@ func renderGuardBench(rows []benchRow, envSize int) {
 		}
 		return 0
 	}
-	present := get("sandbox: present")
+	originate := get("origin: mint")
 	validate := get("guardrail: validate")
-	pdp := get("guardrail: PDP")
-	enforce := get("guardrail: enforce")
+	evaluate := get("guardrail: enforcement fn")
+	enforce := get("guardrail: enforce (") // the "(" disambiguates from "enforcement fn"
 	receiver := get("receiver:")
-	total := get("guarded crossing")
-	sign := enforce - validate - pdp
-	if sign < 0 {
-		sign = 0
+	total := get("sandboxed crossing")
+	// The enforce case originates + validates + evaluates + proves; the prove
+	// (sign PCA1-G) share is what remains after the measured phases.
+	prove := enforce - originate - validate - evaluate
+	if prove < 0 {
+		prove = 0
 	}
 	if total > 0 {
 		fmt.Println()
-		fmt.Println("  " + paint(cBold, "end-to-end decomposition") + paint(cDim, "  (share of one guarded crossing)"))
+		fmt.Println("  " + paint(cBold, "end-to-end decomposition") + paint(cDim, "  (share of one sandboxed crossing)"))
 		comp := []struct {
 			name string
 			ns   float64
 		}{
-			{"sandbox present + forwardingProof", present},
-			{"guardrail validate PCAs", validate},
-			{"guardrail PDP evaluate", pdp},
-			{"guardrail sign envelope (derived)", sign},
+			{"originate outer lineage (PCA0-G)", originate},
+			{"guardrail validate carried lineages", validate},
+			{"guardrail enforcement-fn evaluate", evaluate},
+			{"guardrail prove outer PCA (PCA1-G)", prove},
 		}
 		for _, c := range comp {
 			fmt.Printf("    %s %s  %s\n",
-				pad(c.name, 36),
+				pad(c.name, 38),
 				padLeft(paint(cYellow, fmtDur(dur(c.ns))), 11),
 				paint(cDim, fmt.Sprintf("%4.1f%%", c.ns/total*100)))
 		}
-		fmt.Println("    " + paint(cDim, strings.Repeat("─", 52)))
+		fmt.Println("    " + paint(cDim, strings.Repeat("─", 54)))
 		fmt.Printf("    %s %s   %s\n",
-			pad(paint(cBold, "guarded crossing total"), 36),
+			pad(paint(cBold, "sandboxed crossing total"), 38),
 			padLeft(paint("1;33", fmtDur(dur(total))), 11),
 			paint(cGreen, "~"+commas(int64(1e9/total))+" crossings/s"))
 		fmt.Printf("    %s %s  %s\n",
-			pad("receiver verify (next hop)", 36),
+			pad("receiver accept (next hop)", 38),
 			padLeft(paint(cYellow, fmtDur(dur(receiver))), 11),
-			paint(cDim, "sandbox mode acceptance"))
+			paint(cDim, "enforced acceptance"))
 	}
-	fmt.Printf("\n  %s  guardrail envelope %s\n",
+	fmt.Printf("\n  %s  outer PCA (PCA1-G) %s\n",
 		paint(cBold, "serialized size"), paint(cYellow, sizeStr(envSize)))
 }
 

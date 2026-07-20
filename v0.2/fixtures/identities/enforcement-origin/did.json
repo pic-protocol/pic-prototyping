@@ -3,24 +3,24 @@
     "https://www.w3.org/ns/did/v1",
     "https://w3id.org/security/suites/ed25519-2020/v1"
   ],
-  "id": "did:web:sandbox.example",
+  "id": "did:web:enforcement.example",
   "verificationMethod": [
     {
-      "id": "did:web:sandbox.example#key-1",
+      "id": "did:web:enforcement.example#key-1",
       "type": "Ed25519VerificationKey2020",
-      "controller": "did:web:sandbox.example",
+      "controller": "did:web:enforcement.example",
       "publicKeyJwk": {
         "kty": "OKP",
         "crv": "Ed25519",
-        "kid": "did:web:sandbox.example#key-1",
-        "x": "lvnbbKmwqg0UaPsoYEy8j_Oyv3DNhUJXlJdsq9Uu8uQ"
+        "kid": "did:web:enforcement.example#key-1",
+        "x": "QvoFNufKkVCn25yMsy_at1rOn6NQmGaE611sZKx6nSo"
       }
     }
   ],
   "assertionMethod": [
-    "did:web:sandbox.example#key-1"
+    "did:web:enforcement.example#key-1"
   ],
   "authentication": [
-    "did:web:sandbox.example#key-1"
+    "did:web:enforcement.example#key-1"
   ]
 }

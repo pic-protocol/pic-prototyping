@@ -39,8 +39,12 @@ var actors = []actor{
 	{name: "alice", did: "did:web:alice.example"},
 	{name: "org-authority", did: "did:web:org-authority.example"},
 	{name: "snapshot-issuer", did: "did:web:snapshot.example"},
-	{name: "guardrail", did: "did:web:guardrail.example"},
-	{name: "sandbox", did: "did:web:sandbox.example"},
+	// enforcement-origin is the authorized sandbox origin that mints PCA0-G, the
+	// origin of the outer ENFORCE lineage of a Sandboxed Execution.
+	{name: "enforcement-origin", did: "did:web:enforcement.example"},
+	// guardrail is now an ordinary executor of that outer lineage, so it carries
+	// a signed conformance attestation for the "guardrail" execution contract.
+	{name: "guardrail", did: "did:web:guardrail.example", role: "guardrail", execModel: "deterministic", isExecutor: true},
 	{name: "gateway", did: "did:web:gateway.example", role: "gateway", execModel: "deterministic", isExecutor: true},
 	{name: "backup-service", did: "did:web:backup.example", role: "backup-service", execModel: "deterministic", compliance: []string{"GDPR"}, isExecutor: true},
 	{name: "summary-service", did: "did:web:summary.example", role: "summary-service", execModel: "agentic", isExecutor: true},

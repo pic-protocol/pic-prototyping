@@ -76,3 +76,45 @@ fn build_chain_verifies() {
     );
     assert_eq!(chain.len(), 11, "chain length should be 11");
 }
+
+#[test]
+fn sandboxed_execution() {
+    let now = Utc::now();
+    let w = World::new().expect("world");
+    let res = w.guarded(now).expect("guarded");
+
+    // Permit: PCA1-G produced, enforcementResult=permit, two carried lineages.
+    assert!(res.permit.error.is_empty(), "permit errored: {}", res.permit.error);
+    let outer = res.permit.outer_pca.as_ref().expect("PCA1-G produced");
+    assert_eq!(outer.lineage_counter, 1, "permit did not produce PCA1-G");
+    let por = outer.proof_of_relationship.as_ref().expect("PCA1-G PoR");
+    assert_eq!(por.request.enforcement_result, "permit");
+    let ml = outer.multi_lineage.as_ref().expect("PCA1-G multiLineage");
+    assert_eq!(ml.carried_lineages.len(), 2, "two carried lineages");
+
+    // Deny and invalid: no authorizing continuation.
+    assert!(res.deny.outer_pca.is_none(), "deny produced a continuation");
+    assert!(res.invalid_pca.outer_pca.is_none(), "invalid produced a continuation");
+
+    // Enforced acceptance: permit accepted; bypass and tamper rejected.
+    assert!(res.receiver.accepted, "receiver rejected a valid permit: {}", res.receiver.accept_err);
+    assert!(res.receiver.bypass_rejected, "bypass was not rejected");
+    assert!(res.receiver.tamper_rejected, "tamper was not rejected");
+}
+
+#[test]
+fn accept_rejects_unauthorized_origin() {
+    let now = Utc::now();
+    let w = World::new().expect("world");
+    let res = w.guarded(now).expect("guarded");
+    // A receiving hop that does not accept the enforcement origin must reject
+    // even a fully valid outer chain (a valid signature is not authorization).
+    let err = pic::accept_guarded_crossing(
+        &w.set.registry,
+        None,
+        &["did:web:someone-else.example".to_string()],
+        &res.permit.outer_chain,
+        now,
+    );
+    assert!(err.is_err(), "accepted an unauthorized sandbox origin");
+}

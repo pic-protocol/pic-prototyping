@@ -113,7 +113,17 @@ func NewProver(executor *Identity, attestation Attestation) *Prover {
 // (attenuated) invariants and request binding (§2.1–§2.5). It performs the
 // Prover self-check of §2.3/§2.4: a Prover MUST NOT emit an expansive successor.
 func (pr *Prover) Continue(pred *PCA, inv Invariants, req Request, now time.Time) (*PCA, error) {
-	return pr.build(pred, inv, req, now, true)
+	return pr.build(pred, inv, req, nil, now, true)
+}
+
+// ContinueEnforce builds the next ordinary outer PCA of a Sandboxed Execution
+// (PIC Sandboxed Execution Specification §2.5): it continues `pred` on the outer
+// ENFORCE lineage and carries `ml` in the signed `multiLineage` profile field.
+// The request MUST already commit to `ml` through req.MultiLineageDigest; the
+// single PCA signature then covers both, pinning the concrete ENFORCE operation
+// to that exact inner execution under the executed-vs-signed rule.
+func (pr *Prover) ContinueEnforce(pred *PCA, inv Invariants, req Request, ml *MultiLineage, now time.Time) (*PCA, error) {
+	return pr.build(pred, inv, req, ml, now, true)
 }
 
 // ContinueMalicious builds a successor PCA *without* the Prover self-check,
@@ -121,10 +131,10 @@ func (pr *Prover) Continue(pred *PCA, inv Invariants, req Request, now time.Time
 // such a PCA still fails at the next honest Verifier; this constructor exists so
 // the demo can show that rejection.
 func (pr *Prover) ContinueMalicious(pred *PCA, inv Invariants, req Request, now time.Time) (*PCA, error) {
-	return pr.build(pred, inv, req, now, false)
+	return pr.build(pred, inv, req, nil, now, false)
 }
 
-func (pr *Prover) build(pred *PCA, inv Invariants, req Request, now time.Time, enforce bool) (*PCA, error) {
+func (pr *Prover) build(pred *PCA, inv Invariants, req Request, ml *MultiLineage, now time.Time, enforce bool) (*PCA, error) {
 	if enforce {
 		if err := Attenuates(inv, pred.Invariants); err != nil {
 			return nil, fmt.Errorf("prover self-check failed: %w", err)
@@ -182,8 +192,9 @@ func (pr *Prover) build(pred *PCA, inv Invariants, req Request, now time.Time, e
 			MaxUses:   1,
 			ExpiresAt: challengeExpiry,
 		},
-		IssuedAt:  now,
-		ExpiresAt: expires,
+		MultiLineage: ml, // Sandboxed Execution profile field (nil on ordinary PCAs)
+		IssuedAt:     now,
+		ExpiresAt:    expires,
 	}
 	if err := signPCA(p, pr.Executor); err != nil {
 		return nil, err

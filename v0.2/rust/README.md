@@ -38,14 +38,17 @@ specifications:
    trusted snapshot — cost `O(hops since snapshot)` instead of `O(n)`.
 4. **Revocation**: a `LINEAGE-SUFFIX(lineageId, fromCounter)` cutoff rejects a hop
    and everything causally after it, while earlier hops stay valid.
-5. **Execution Guardrail** (`guardrail`, or `--guardrail` on any scenario): the
-   canonical guarded crossing of the PIC Execution Guardrail spec — an AI agent
-   proposes an S3 write as one **Multi-Lineage Execution** (its own Lineage
-   Execution B plus the user's A); the **sandbox** presents it
-   (`forwardingProof`), the **guardrail** validates every PCA, evaluates the
-   fixture policy over the **semantic scopes** through a simulated PDP, and
-   enforces permit or deny, signing the guardrail forwarding envelope
-   (`guardrailProof`). Deny, invalid-PCA, bypass, and tamper cases included.
+5. **Sandboxed Execution** (`guardrail`/`exec`, or `--guardrail` on any scenario):
+   the canonical **PIC-of-PIC** construction of the PIC Sandboxed Execution spec.
+   An authorized sandbox origin originates an **outer ENFORCE lineage** (`PCA0-G`);
+   an AI agent proposes an S3 write as one **Multi-Lineage Execution** (its own
+   Lineage Execution B plus the user's A). The **guardrail** — an ordinary
+   executor of the outer lineage — validates every carried lineage, evaluates the
+   fixture policy over the **semantic scopes** through a simulated PDP, and on
+   permit proves the next ordinary outer PCA (`PCA1-G`) carrying the signed
+   `multiLineage` field. No sandbox primitive, no envelope: the outer PCA *is* the
+   decision. Deny, invalid-carried-lineage, bypass, and tamper cases included, and
+   a receiving hop runs **enforced acceptance**.
 
 ## Requirements
 
@@ -71,23 +74,29 @@ cargo run --bin picdemo -- flow --only-json | jq   # the whole flow as one JSON
 cargo run --bin picdemo -- bench
 cargo run --bin picdemo -- bench --only-json | jq
 
+# explore a Sandboxed Execution (guardrail on by default)
+cargo run --bin picdemo -- exec                    # compact hop diagram: PIC carrying PIC
+cargo run --bin picdemo -- exec A                   # drill into one carried lineage (or B, outer, all)
+cargo run --bin picdemo -- exec all --pca           # every lineage, full signed PCAs per hop
+cargo run --bin picdemo -- exec --no-guardrail      # debug: inner lineages only, no outer ENFORCE lineage
+
 # inspect real signed artifacts + a live tamper proof
 cargo run --bin picdemo -- dump                    # human-readable
 cargo run --bin picdemo -- dump --only-json | jq   # one JSON document
 cargo run --bin picdemo -- dump hop1               # only one artifact (pca0|hop0, pca1|hop1, envelope)
 
-# Execution Guardrail (sandbox + guardrail + simulated PDP over the fixture policy)
-cargo run --bin picdemo -- guardrail               # canonical guarded crossing: permit, deny, invalid-PCA
-cargo run --bin picdemo -- all --guardrail         # every scenario, tip crossing routed through the guardrail
-cargo run --bin picdemo -- flow --guardrail        # the flow's chain crosses the guarded boundary
-cargo run --bin picdemo -- bench --guardrail       # + guarded-crossing timings, decomposed per component
+# Sandboxed Execution (outer ENFORCE lineage + guardrail + simulated PDP over the fixture policy)
+cargo run --bin picdemo -- guardrail               # canonical Sandboxed Execution: permit, deny, invalid
+cargo run --bin picdemo -- all --guardrail         # every scenario, tip crossing through a Sandboxed Execution
+cargo run --bin picdemo -- flow --guardrail        # the flow's chain crosses a Sandboxed Execution
+cargo run --bin picdemo -- bench --guardrail       # + sandboxed-crossing timings, decomposed per phase
 
-# guardrail artifacts (add selectors to filter)
-cargo run --bin picdemo -- dump --guardrail                 # everything, incl. policy, scopes, MLE, PDP, envelope
+# sandboxed-execution artifacts (add selectors to filter)
+cargo run --bin picdemo -- dump --guardrail                 # everything, incl. policy, scopes, multiLineage, outer PCA
 cargo run --bin picdemo -- dump --guardrail policy scopes   # the policy + the scope bindings
-cargo run --bin picdemo -- dump --guardrail pdp             # PDP exchange: request -> decision (with reason)
-cargo run --bin picdemo -- dump --guardrail guard           # the signed guardrail forwarding envelope
-cargo run --bin picdemo -- dump --guardrail denytrace       # the deny case (external-sharing participant)
+cargo run --bin picdemo -- dump --guardrail pdp             # enforcement-function exchange: request -> decision
+cargo run --bin picdemo -- dump --guardrail outer multilineage   # the outer ENFORCE lineage + signed multiLineage
+cargo run --bin picdemo -- dump --guardrail accept denytrace     # enforced-acceptance checks + the deny case
 ```
 
 Or via [Task](https://taskfile.dev) from the repository root:
@@ -125,7 +134,7 @@ v0.2/rust
 │   ├── verifier.rs        # origin + per-hop checks (Prover/Verifier spec §3.3)
 │   ├── snapshot.rs        # Snapshot Hash Chain profile (§5.2)
 │   ├── revocation.rs      # lineageId derivation, LINEAGE-SUFFIX store and check
-│   ├── guardrail.rs       # Execution Guardrail: MLE, scopes, PDP, sandbox, guardrail envelope
+│   ├── sandboxed.rs       # Sandboxed Execution (PIC of PIC): outer ENFORCE lineage, multiLineage, guardrail, enforced acceptance
 │   ├── fixtureset.rs      # cached (OnceLock) loader of v0.2/fixtures (incl. policy + scopes)
 │   ├── scenario/          # the Why-PIC use cases + the guarded crossing, on the fixtures
 │   └── bin/

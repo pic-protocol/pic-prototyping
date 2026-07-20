@@ -110,7 +110,22 @@ impl<'a> Prover<'a> {
         req: Request,
         now: DateTime<Utc>,
     ) -> PicResult<Pca> {
-        self.build(pred, inv, req, now, true)
+        self.build(pred, inv, req, None, now, true)
+    }
+
+    /// Builds the next ordinary outer PCA of a Sandboxed Execution (PIC Sandboxed
+    /// Execution Specification §2.5): continues `pred` on the outer ENFORCE
+    /// lineage and carries `ml` in the signed `multiLineage` profile field. The
+    /// request MUST already commit to `ml` through `request.multiLineageDigest`.
+    pub fn continue_enforce(
+        &self,
+        pred: &Pca,
+        inv: Invariants,
+        req: Request,
+        ml: crate::sandboxed::MultiLineage,
+        now: DateTime<Utc>,
+    ) -> PicResult<Pca> {
+        self.build(pred, inv, req, Some(ml), now, true)
     }
 
     /// Builds a successor PCA *without* the Prover self-check, simulating a buggy
@@ -123,14 +138,16 @@ impl<'a> Prover<'a> {
         req: Request,
         now: DateTime<Utc>,
     ) -> PicResult<Pca> {
-        self.build(pred, inv, req, now, false)
+        self.build(pred, inv, req, None, now, false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build(
         &self,
         pred: &Pca,
         inv: Invariants,
         req: Request,
+        ml: Option<crate::sandboxed::MultiLineage>,
         now: DateTime<Utc>,
         enforce: bool,
     ) -> PicResult<Pca> {
@@ -184,6 +201,7 @@ impl<'a> Prover<'a> {
                 max_uses: 1,
                 expires_at: rfc3339(challenge_expiry),
             },
+            multi_lineage: ml,
             issued_at: rfc3339(now),
             expires_at: rfc3339(expires),
             ..Default::default()

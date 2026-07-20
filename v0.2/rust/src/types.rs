@@ -126,6 +126,38 @@ pub struct Request {
         skip_serializing_if = "String::is_empty"
     )]
     pub payload_digest: String,
+
+    // Sandboxed Execution profile (outer ENFORCE PCA only).
+    #[serde(
+        default,
+        rename = "multiLineageDigest",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub multi_lineage_digest: String,
+    #[serde(
+        default,
+        rename = "policyCommitment",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub policy_commitment: String,
+    #[serde(
+        default,
+        rename = "inputsCommitment",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub inputs_commitment: String,
+    #[serde(
+        default,
+        rename = "semanticProfile",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub semantic_profile: String,
+    #[serde(
+        default,
+        rename = "enforcementResult",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub enforcement_result: String,
 }
 
 /// Answers the predecessor's challenge with a fresh local nonce (§2.3).
@@ -209,6 +241,16 @@ pub struct Pca {
 
     pub invariants: Invariants,
     pub continuation: Continuation,
+
+    /// The signed Sandboxed Execution profile field carried by an outer ENFORCE
+    /// PCA (§2.4): the inner Multi-Lineage Execution being governed. Covered by
+    /// the single PCA signature; None on every ordinary PCA.
+    #[serde(
+        default,
+        rename = "multiLineage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub multi_lineage: Option<crate::sandboxed::MultiLineage>,
 
     #[serde(rename = "issuedAt")]
     pub issued_at: String,

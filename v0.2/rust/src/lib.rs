@@ -16,8 +16,8 @@ use chrono::{DateTime, SecondsFormat, Utc};
 pub mod authority;
 pub mod crypto;
 pub mod fixtureset;
-pub mod guardrail;
 pub mod prover;
+pub mod sandboxed;
 pub mod revocation;
 pub mod scenario;
 pub mod snapshot;
@@ -62,11 +62,11 @@ pub fn parse_rfc3339(s: &str) -> DateTime<Utc> {
 // `pic.` package qualifier).
 pub use authority::{attenuates, authorize, conforms};
 pub use crypto::{canonical_json, digest_of, hash_parts, random_b64, Identity, Registry};
-pub use guardrail::{
-    scopes_of, verify_guardrail_envelope, CrossingContext, EnforcementTrace, Guardrail,
-    GuardrailEnvelope, LocalPdp, MultiLineageExecution, Participant, Pdp, PdpDecision,
-    PdpParticipant, PdpRequest, Policy, PresentedCrossing, Sandbox, ScopeBindings,
-    TraceParticipant,
+pub use sandboxed::{
+    accept_guarded_crossing, multi_lineage_digest, scopes_of, CarriedLineage, CrossingContext,
+    EnforcementTrace, Freshness, Guardrail, LocalPdp, MultiLineage, MultiLineageExecution,
+    Participant, Pdp, PdpDecision, PdpParticipant, PdpRequest, Policy, SandboxedExecution,
+    ScopeBindings, TraceParticipant, ENFORCE_OPERATION, MULTI_LINEAGE_PROFILE,
 };
 pub use prover::{mint_pca0, sign_attestation, wrap_envelope, Prover};
 pub use revocation::{derive_lineage_id, root_branch_id, RevocationStore};

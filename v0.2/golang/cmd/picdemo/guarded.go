@@ -14,14 +14,15 @@ import (
 	"github.com/pic-protocol/pic-prototyping/v0.2/golang/scenario"
 )
 
-// This file renders the guarded crossings of the Execution Guardrail
-// prototype: the dedicated `guardrail` scenario and the compact block the
-// other scenarios append under --guardrail.
+// This file renders the Sandboxed Execution of the prototype: the dedicated
+// `guardrail` scenario and the compact block the other scenarios append under
+// --guardrail. PIC carries PIC: an outer ENFORCE lineage carries the inner
+// Multi-Lineage Execution; the guardrail is the next ordinary executor.
 
-// runGuardrail renders the canonical guarded crossing end to end: the two
-// Lineage Executions, the Multi-Lineage Execution, the sandbox presentation,
-// the guardrail enforcement (validate → evaluate via PDP → enforce), the
-// signed guardrail envelope, and the receiver / bypass / tamper checks.
+// runGuardrail renders the canonical Sandboxed Execution end to end: the outer
+// ENFORCE lineage origin, the carried lineages, the guardrail enforcement
+// (validate outer → validate carried → evaluate → prove), the signed outer PCA,
+// and the receiving-hop enforced-acceptance / bypass / tamper checks.
 func runGuardrail(now time.Time, o opts) error {
 	w, err := scenario.NewWorld()
 	if err != nil {
@@ -36,49 +37,45 @@ func runGuardrail(now time.Time, o opts) error {
 		return nil
 	}
 
-	header("Guarded crossing — sandbox + Execution Guardrail")
+	header("Sandboxed Execution — PIC carrying PIC (outer ENFORCE lineage)")
 	fmt.Println(paint(cDim, wrap(res.Description, 96)))
 	fmt.Printf("\npolicy %s: %s iff %s\n",
 		paint(cBold, res.Policy.ID), res.Policy.Effect, paint(cCyan, res.Policy.When))
 
-	// The two Lineage Executions of the permit crossing.
 	fmt.Println()
-	renderParticipants(res.Permit)
+	renderCarried(res.Permit)
 
-	// The guarded path of the permit crossing, step by step.
 	renderMLEBox(res.Permit)
-	renderSandboxArrow(res.Permit)
+	renderOriginArrow(res.Origin)
 	renderGuardrailBox(res.Permit, true)
 	renderReceiver(res.Receiver)
 
-	// Deny and invalid-PCA crossings, compact.
 	fmt.Printf("\n%s deny case — %s → %s\n", paint(cBold, "▶"),
 		res.Deny.Name, res.Deny.MLE.Destination)
 	renderGuardrailBox(res.Deny, false)
 
-	fmt.Printf("\n%s invalid-PCA case — %s\n", paint(cBold, "▶"), res.InvalidPCA.Name)
+	fmt.Printf("\n%s invalid carried-lineage case — %s\n", paint(cBold, "▶"), res.InvalidPCA.Name)
 	renderGuardrailBox(res.InvalidPCA, false)
 
 	fmt.Println()
-	fmt.Println(paint(cDim, "inspect the real signed artifacts: picdemo dump --guardrail            (everything)"))
-	fmt.Println(paint(cDim, "                                   picdemo dump --guardrail guard      (guardrail envelope)"))
-	fmt.Println(paint(cDim, "                                   picdemo dump --guardrail pdp policy  (PDP exchange + policy)"))
+	fmt.Println(paint(cDim, "explore the execution:  picdemo exec                     (compact hop view)"))
+	fmt.Println(paint(cDim, "                        picdemo exec --lineage all --pca  (every lineage, full PCAs)"))
+	fmt.Println(paint(cDim, "inspect real artifacts: picdemo dump --guardrail          (multiLineage, outer PCA, accept)"))
 	return nil
 }
 
-// renderParticipants prints each Lineage Execution with its grant → scopes
-// binding and its tip authority.
-func renderParticipants(out *scenario.CrossingOutcome) {
-	for _, tp := range out.Trace.Participants {
-		origin := out.MLE
+// renderCarried prints each carried lineage with its grant → scopes binding and
+// its tip authority.
+func renderCarried(out *scenario.CrossingOutcome) {
+	for _, tp := range out.Trace.CarriedLineages {
 		var issuer string
-		for _, p := range origin.Participants {
+		for _, p := range out.MLE.Participants {
 			if p.Label == tp.Label {
 				issuer = p.Chain[0].Issuer
 			}
 		}
 		fmt.Printf("%s %s  %s\n", paint(cCyan, "●"),
-			paint(cBold, "Lineage Execution "+tp.Label),
+			paint(cBold, "carried lineage "+tp.Label),
 			paint(cDim, fmt.Sprintf("origin %s, %d PCAs", issuer, tp.ChainLen)))
 		fmt.Printf("    authority %s   grant %s → scopes %s\n",
 			paint(cGreen, fmt.Sprint(tp.Authority)), tp.GrantID,
@@ -86,7 +83,7 @@ func renderParticipants(out *scenario.CrossingOutcome) {
 	}
 }
 
-// renderMLEBox draws the Multi-Lineage Execution carrier: the participants
+// renderMLEBox draws the Multi-Lineage Execution carrier: the carried lineages
 // travel together, authorities remain separate, one proposed transition.
 func renderMLEBox(out *scenario.CrossingOutcome) {
 	m := out.MLE
@@ -101,108 +98,111 @@ func renderMLEBox(out *scenario.CrossingOutcome) {
 		}
 		fmt.Println(line)
 	}
-	fmt.Println("│   " + paint(cDim, "authorities remain separate; never merged"))
+	fmt.Println("│   " + paint(cDim, "carried lineages remain independent; authorities never merged"))
 	fmt.Println("└" + strings.Repeat("─", 68))
 }
 
-// renderSandboxArrow shows the sandbox capturing the crossing and signing the
-// forwardingProof — the executor cannot skip this step.
-func renderSandboxArrow(out *scenario.CrossingOutcome) {
+// renderOriginArrow shows the authorized sandbox origin minting PCA0-G, the
+// origin of the outer ENFORCE lineage.
+func renderOriginArrow(origin *pic.PCA) {
 	fmt.Println("        " + paint(cDim, "│"))
-	fmt.Printf("        %s %s captures the crossing\n", paint(cCyan, "│ sandbox"),
-		paint(cActor, out.Trace.ForwardedBy))
-	if out.Envelope != nil {
-		fmt.Printf("        %s\n", paint(cDim, "│   forwardingProof signed by "+out.Envelope.ForwardingProof.VerificationMethod))
-	} else {
-		fmt.Println("        " + paint(cDim, "│   forwardingProof signed (presentation attributed to the sandbox)"))
-	}
+	fmt.Printf("        %s %s originates the outer ENFORCE lineage %s\n",
+		paint(cCyan, "│ sandbox origin"), paint(cActor, origin.Issuer),
+		paint(cDim, "(PCA0-G, authority { ENFORCE })"))
 	fmt.Println("        " + paint(cCyan, "▼"))
 }
 
-// renderGuardrailBox draws the enforcement order: validate, evaluate, enforce.
+// renderGuardrailBox draws the guardrail phases: validate outer, validate
+// carried, evaluate, and prove the next outer PCA (permit) or deny.
 func renderGuardrailBox(out *scenario.CrossingOutcome, full bool) {
 	t := out.Trace
-	fmt.Printf("┌ %s\n", paint(cBold, "EXECUTION GUARDRAIL")+" "+paint(cActor, "did:web:guardrail.example"))
+	fmt.Printf("┌ %s %s\n", paint(cBold, "GUARDRAIL"),
+		paint(cActor, t.GuardrailExecutor)+paint(cDim, " — ordinary executor of the outer ENFORCE lineage"))
 
-	// 1. validate
+	// 1. validate outer
+	fmt.Printf("│ 1 outer      %s continue PCA%d-G → PCA%d-G\n",
+		verdict(t.OuterValid, paint(cGreen, "✔"), paint(cReject, "✗")),
+		t.OuterPredecessor, t.OuterPredecessor+1)
+
+	// 2. validate carried lineages
 	var parts []string
-	for _, tp := range t.Participants {
+	for _, tp := range t.CarriedLineages {
 		mark := paint(cGreen, "✔")
 		if !tp.Valid {
 			mark = paint(cReject, "✗")
 		}
 		parts = append(parts, fmt.Sprintf("%s %s (%d PCAs)", tp.Label, mark, tp.ChainLen))
 	}
-	fmt.Printf("│ 1 validate   %s\n", strings.Join(parts, "   "))
-	for _, tp := range t.Participants {
+	fmt.Printf("│ 2 carried    %s\n", strings.Join(parts, "   "))
+	for _, tp := range t.CarriedLineages {
 		if !tp.Valid {
 			fmt.Printf("│              %s\n", paint(cReject, tp.Label+": "+tp.Error))
 		}
 	}
 
-	// 2. evaluate
+	// 3. evaluate
 	if t.PDPCalled {
 		var in []string
 		for _, p := range t.PDPRequest.Participants {
 			in = append(in, fmt.Sprintf("%s%v", p.Label, p.Scopes))
 		}
-		fmt.Printf("│ 2 evaluate   PDP ← participants %s  destination %s\n",
+		fmt.Printf("│ 3 evaluate   enforcement fn ← %s  destination %s\n",
 			paint(cYellow, strings.Join(in, " ")), t.PDPRequest.Destination)
-		fmt.Printf("│              PDP → %s — %s\n", decision(t.Decision.Effect), t.Decision.Reason)
+		fmt.Printf("│              → %s — %s\n", decision(t.Decision.Effect), t.Decision.Reason)
 	} else {
-		fmt.Printf("│ 2 evaluate   %s\n", paint(cDim, "skipped — deny enforced without evaluating policy"))
+		fmt.Printf("│ 3 evaluate   %s\n", paint(cDim, "skipped — deny before policy evaluation"))
 	}
 
-	// 3. enforce
-	if out.Envelope != nil {
-		fmt.Printf("│ 3 enforce    %s → guardrailProof signed by %s\n",
-			decision("permit"), out.Envelope.GuardrailProof.VerificationMethod)
-		fmt.Printf("│              %s\n", paint(cDim, "covers forwardingProofDigest "+shortHash(out.Envelope.GuardrailProof.ForwardingProofDigest)))
+	// 4. prove / deny
+	if t.Enforced == "permit" {
+		fmt.Printf("│ 4 prove      %s → signs PCA%d-G  request.enforcementResult=permit\n",
+			decision("permit"), t.OuterCounter)
+		fmt.Printf("│              %s\n", paint(cDim, "request.multiLineageDigest "+shortHash(t.MultiLineageDigest)))
 	} else {
-		fmt.Printf("│ 3 enforce    %s — crossing blocked, no envelope issued\n", decision("deny"))
+		fmt.Printf("│ 4 prove      %s — no authorizing continuation produced\n", decision("deny"))
 	}
 	fmt.Println("└" + strings.Repeat("─", 68))
 
-	if full && out.Envelope != nil {
-		fmt.Println("        " + paint(cCyan, "▼") + "  " + paint(cDim, "guardrail forwarding envelope (replaces the ordinary envelope; never nested)"))
+	if full && t.Enforced == "permit" {
+		fmt.Println("        " + paint(cCyan, "▼") + "  " + paint(cDim, "the outer PCA (PCA1-G) is the guardrail decision; no separate envelope, no second signature"))
 	}
 }
 
-// renderReceiver shows the sandbox-mode acceptance and the bypass/tamper
-// rejections at the receiving hop.
+// renderReceiver shows enforced acceptance and the bypass/tamper rejections at
+// the receiving hop.
 func renderReceiver(rc scenario.ReceiverChecks) {
-	fmt.Printf("\n%s receiving hop in sandbox mode\n", paint(cBold, "▶"))
-	fmt.Printf("  envelope              %s\n", verdict(rc.EnvelopeAccepted, paint(cGreen, "ACCEPTED — both proofs verify, digests recomputed, freshness ok"), paint(cReject, "rejected: "+rc.EnvelopeErr)))
-	fmt.Printf("  bypass (no envelope)  %s\n", verdict(rc.BypassRejected, paint(cReject, "REJECTED"), "accepted (BUG!)"))
+	fmt.Printf("\n%s receiving hop — enforced acceptance\n", paint(cBold, "▶"))
+	fmt.Printf("  outer PCA             %s\n", verdict(rc.Accepted, paint(cGreen, "ACCEPTED — outer PIC valid, origin authorized, ENFORCE, multiLineageDigest ok, permit, fresh"), paint(cReject, "rejected: "+rc.AcceptErr)))
+	fmt.Printf("  bypass (no outer PCA) %s\n", verdict(rc.BypassRejected, paint(cReject, "REJECTED"), "accepted (BUG!)"))
 	fmt.Printf("                        %s\n", paint(cDim, rc.BypassReason))
-	fmt.Printf("  tampered destination  %s\n", verdict(rc.TamperRejected, paint(cReject, "REJECTED"), "accepted (BUG!)"))
+	fmt.Printf("  tampered carried set  %s\n", verdict(rc.TamperRejected, paint(cReject, "REJECTED"), "accepted (BUG!)"))
 	fmt.Printf("                        %s\n", paint(cDim, rc.TamperReason))
 }
 
 // renderTipGuard is the compact --guardrail augmentation the other scenarios
-// append: their tip chain becomes Lineage Execution A and crosses the guarded
-// boundary together with the agent's own Lineage Execution B.
+// append: their tip chain becomes carried lineage A and crosses a Sandboxed
+// Execution together with the agent's own carried lineage B.
 func renderTipGuard(w *scenario.World, chain []*pic.PCA, destination string, now time.Time) error {
 	out, rc, err := w.GuardTip(chain, destination, now)
 	if err != nil {
 		return err
 	}
 	t := out.Trace
-	fmt.Printf("\n%s\n", paint(cBold, "── guarded (--guardrail): the scenario's tip crossing goes through sandbox + guardrail ──"))
+	fmt.Printf("\n%s\n", paint(cBold, "── sandboxed (--guardrail): the scenario's tip crossing goes through an outer ENFORCE lineage ──"))
 	var in []string
-	for _, tp := range t.Participants {
+	for _, tp := range t.CarriedLineages {
 		in = append(in, fmt.Sprintf("%s%v", tp.Label, tp.Scopes))
 	}
-	fmt.Printf("  participants %s → %s\n", paint(cYellow, strings.Join(in, " + ")), destination)
-	fmt.Printf("  sandbox %s → forwardingProof %s   guardrail: validate %s, PDP %s, guardrailProof %s\n",
-		t.ForwardedBy,
-		paint(cGreen, "✔"),
-		verdict(t.PCAsValid, paint(cGreen, "✔"), paint(cReject, "✗")),
+	fmt.Printf("  carried lineages %s → %s\n", paint(cYellow, strings.Join(in, " + ")), destination)
+	fmt.Printf("  guardrail %s: outer %s, carried %s, evaluate %s, prove %s\n",
+		t.GuardrailExecutor,
+		verdict(t.OuterValid, paint(cGreen, "✔"), paint(cReject, "✗")),
+		verdict(t.CarriedValid, paint(cGreen, "✔"), paint(cReject, "✗")),
 		decision(t.Decision.Effect),
-		verdict(out.Envelope != nil, paint(cGreen, "✔ signed"), paint(cDim, "not issued")))
-	if out.Envelope != nil {
-		fmt.Printf("  receiver: envelope %s   bypass %s\n",
-			verdict(rc.EnvelopeAccepted, paint(cGreen, "ACCEPTED"), paint(cReject, "rejected")),
+		verdict(t.Enforced == "permit", paint(cGreen, "✔ PCA1-G signed"), paint(cDim, "not produced")))
+	if t.Enforced == "permit" {
+		fmt.Printf("  receiver: outer PCA %s   bypass %s\n",
+			verdict(rc.Accepted, paint(cGreen, "ACCEPTED"), paint(cReject, "rejected")),
 			verdict(rc.BypassRejected, paint(cReject, "REJECTED"), "accepted (BUG!)"))
 	} else {
 		fmt.Printf("  %s\n", paint(cReject, "crossing blocked: "+out.Err))

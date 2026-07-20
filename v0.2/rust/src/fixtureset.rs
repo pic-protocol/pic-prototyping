@@ -7,7 +7,7 @@
 //! and caches them, so scenarios and benchmarks pay no per-use disk cost.
 
 use crate::crypto::{b64_decode, Identity, Registry};
-use crate::guardrail::{Policy, ScopeBindings};
+use crate::sandboxed::{Policy, ScopeBindings};
 use crate::types::Attestation;
 use crate::PicResult;
 use serde::Deserialize;

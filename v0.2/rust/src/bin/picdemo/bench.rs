@@ -151,19 +151,30 @@ pub(crate) fn run_bench(now: DateTime<Utc>, o: &crate::Opts) -> Result<(), Strin
     Ok(())
 }
 
-/// Measures the guarded crossing on the canonical A+B example: each component
-/// alone, then the whole pipeline end to end.
+/// Measures the Sandboxed Execution on the canonical A+B example: each guardrail
+/// phase alone, then the whole pipeline end to end.
 fn bench_guardrail(w: &World, now: DateTime<Utc>) -> Result<(Vec<BenchRow>, usize), String> {
     use pic::scenario::guardrail::{GRANT_AGENT_S3_WRITER, GRANT_USER_BACKUP};
     use pic::types::ExecutionContract;
-    use pic::{Guardrail, LocalPdp, MultiLineageExecution, Participant, Pdp, Sandbox};
+    use pic::{
+        accept_guarded_crossing, Guardrail, LocalPdp, MultiLineageExecution, Participant, Pdp,
+        SandboxedExecution,
+    };
 
     let reg = &w.set.registry;
     let pdp = LocalPdp {
         policy: w.set.policy.clone(),
     };
-    let guard = Guardrail::new(w.set.identity("guardrail"), reg, &pdp, &w.set.scopes);
-    let sandbox = Sandbox::new(w.set.identity("sandbox"), &guard);
+    let guard = Guardrail::new(
+        w.set.identity("guardrail"),
+        w.set.attestation("guardrail"),
+        reg,
+        &pdp,
+        w.set.policy.clone(),
+        &w.set.scopes,
+    );
+    let origin = w.set.identity("enforcement-origin");
+    let origins = w.accepted_origins();
     let agent = w.set.identity("summary-service");
     let agent_att = w.set.attestation("summary-service");
     let contract = ExecutionContract::default();
@@ -212,32 +223,35 @@ fn bench_guardrail(w: &World, now: DateTime<Utc>) -> Result<(Vec<BenchRow>, usiz
             Participant {
                 label: "A".into(),
                 chain: vec![pca0_a, pca1_a],
+                role: "user-backup".into(),
             },
             Participant {
                 label: "B".into(),
                 chain: vec![pca0_b, pca1_b],
+                role: "agent-s3-writer".into(),
             },
         ],
         proposing: "B".into(),
         destination: "s3://backups/tenant-42".into(),
     };
 
-    let pres = sandbox.present(&mle, now)?;
-    let (env, trace) = guard.enforce(&pres, now);
-    let env = env.ok_or("bench: guarded crossing unexpectedly denied")?;
-    let recognized = w.recognized_guardrails();
+    // One reference crossing for the accept benchmark and the size figure.
+    let mut se_ref = SandboxedExecution::originate(origin, now);
+    let (outer, trace) = guard.enforce(&mut se_ref, &mle, now);
+    let outer = outer.ok_or("bench: sandboxed crossing unexpectedly denied")?;
+    let ref_chain = se_ref.chain.clone();
     let req = trace.pdp_request.clone().ok_or("bench: no pdp request")?;
 
     type Case<'a> = (&'a str, Box<dyn Fn() + 'a>);
     let cases: Vec<Case> = vec![
         (
-            "sandbox: present (forwardingProof)",
+            "origin: mint PCA0-G",
             Box::new(|| {
-                let _ = sandbox.present(&mle, now);
+                let _ = SandboxedExecution::originate(origin, now);
             }),
         ),
         (
-            "guardrail: validate participants",
+            "guardrail: validate carried lineages",
             Box::new(|| {
                 for p in &mle.participants {
                     let _ = Verifier::new(reg, None).verify_full_chain(&p.chain, now);
@@ -245,27 +259,30 @@ fn bench_guardrail(w: &World, now: DateTime<Utc>) -> Result<(Vec<BenchRow>, usiz
             }),
         ),
         (
-            "guardrail: PDP evaluate",
+            "guardrail: enforcement fn evaluate",
             Box::new(|| {
                 let _ = pdp.evaluate(&req);
             }),
         ),
         (
-            "guardrail: enforce (3 steps)",
+            "guardrail: enforce (prove PCA1-G)",
             Box::new(|| {
-                let _ = guard.enforce(&pres, now);
+                let mut se = SandboxedExecution::originate(origin, now);
+                let _ = guard.enforce(&mut se, &mle, now);
             }),
         ),
         (
-            "receiver: verify envelope",
+            "receiver: accept outer PCA",
             Box::new(|| {
-                let _ = pic::verify_guardrail_envelope(reg, &recognized, Some(&env), now);
+                let _ = accept_guarded_crossing(reg, None, &origins, &ref_chain, now);
             }),
         ),
         (
-            "guarded crossing end to end",
+            "sandboxed crossing end to end",
             Box::new(|| {
-                let _ = sandbox.cross(&mle, now);
+                let mut se = SandboxedExecution::originate(origin, now);
+                let _ = guard.enforce(&mut se, &mle, now);
+                let _ = accept_guarded_crossing(reg, None, &origins, &se.chain, now);
             }),
         ),
     ];
@@ -280,7 +297,7 @@ fn bench_guardrail(w: &World, now: DateTime<Utc>) -> Result<(Vec<BenchRow>, usiz
             ops_per_sec: 1e9 / ns,
         });
     }
-    Ok((rows, json_len(&env)))
+    Ok((rows, json_len(&outer)))
 }
 
 /// Prints the guarded-crossing table plus the decomposition of the end-to-end
@@ -289,8 +306,11 @@ fn render_guard_bench(rows: &[BenchRow], env_size: usize) {
     println!();
     println!(
         "  {}{}",
-        paint(C_BOLD, "guarded crossing (--guardrail)"),
-        paint(C_DIM, "  sandbox → guardrail (validate → PDP → sign) → receiver")
+        paint(C_BOLD, "sandboxed crossing (--guardrail)"),
+        paint(
+            C_DIM,
+            "  originate → guardrail (validate → evaluate → prove) → accept"
+        )
     );
     println!("  {}", paint(C_DIM, &"─".repeat(74)));
 
@@ -314,38 +334,38 @@ fn render_guard_bench(rows: &[BenchRow], env_size: usize) {
             .map(|r| r.ns_per_op)
             .unwrap_or(0.0)
     };
-    let present = get("sandbox: present");
+    let originate = get("origin: mint");
     let validate = get("guardrail: validate");
-    let pdp = get("guardrail: PDP");
-    let enforce = get("guardrail: enforce");
+    let evaluate = get("guardrail: enforcement fn");
+    let enforce = get("guardrail: enforce ("); // the "(" disambiguates from "enforcement fn"
     let receiver = get("receiver:");
-    let total = get("guarded crossing");
-    let sign = (enforce - validate - pdp).max(0.0);
+    let total = get("sandboxed crossing");
+    let prove = (enforce - originate - validate - evaluate).max(0.0);
     if total > 0.0 {
         println!();
         println!(
             "  {}{}",
             paint(C_BOLD, "end-to-end decomposition"),
-            paint(C_DIM, "  (share of one guarded crossing)")
+            paint(C_DIM, "  (share of one sandboxed crossing)")
         );
         let comp = [
-            ("sandbox present + forwardingProof", present),
-            ("guardrail validate PCAs", validate),
-            ("guardrail PDP evaluate", pdp),
-            ("guardrail sign envelope (derived)", sign),
+            ("originate outer lineage (PCA0-G)", originate),
+            ("guardrail validate carried lineages", validate),
+            ("guardrail enforcement-fn evaluate", evaluate),
+            ("guardrail prove outer PCA (PCA1-G)", prove),
         ];
         for (name, ns) in comp {
             println!(
                 "    {} {}  {}",
-                pad(name, 36),
+                pad(name, 38),
                 pad_left(&paint(C_YELLOW, &fmt_dur(dur(ns))), 11),
                 paint(C_DIM, &format!("{:4.1}%", ns / total * 100.0))
             );
         }
-        println!("    {}", paint(C_DIM, &"─".repeat(52)));
+        println!("    {}", paint(C_DIM, &"─".repeat(54)));
         println!(
             "    {} {}   {}",
-            pad(&paint(C_BOLD, "guarded crossing total"), 36),
+            pad(&paint(C_BOLD, "sandboxed crossing total"), 38),
             pad_left(&paint("1;33", &fmt_dur(dur(total))), 11),
             paint(
                 C_GREEN,
@@ -354,13 +374,13 @@ fn render_guard_bench(rows: &[BenchRow], env_size: usize) {
         );
         println!(
             "    {} {}  {}",
-            pad("receiver verify (next hop)", 36),
+            pad("receiver accept (next hop)", 38),
             pad_left(&paint(C_YELLOW, &fmt_dur(dur(receiver))), 11),
-            paint(C_DIM, "sandbox mode acceptance")
+            paint(C_DIM, "enforced acceptance")
         );
     }
     println!(
-        "\n  {}  guardrail envelope {}",
+        "\n  {}  outer PCA (PCA1-G) {}",
         paint(C_BOLD, "serialized size"),
         paint(C_YELLOW, &size_str(env_size))
     );

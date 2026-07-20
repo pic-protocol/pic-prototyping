@@ -20,6 +20,7 @@
 //! demonstration code; the PIC Specification is authoritative.
 
 mod bench;
+mod exec;
 mod flow;
 mod guarded;
 
@@ -62,10 +63,11 @@ fn main() {
     let order = ["why-pic", "confused-deputy", "snapshot", "revocation"];
     let known = ["why-pic", "confused-deputy", "snapshot", "revocation", "guardrail"];
 
-    if which == "dump" || which == "flow" || which == "bench" {
+    if which == "dump" || which == "flow" || which == "bench" || which == "exec" {
         let res = match which.as_str() {
             "flow" => flow::run_flow(now, &o),
             "bench" => bench::run_bench(now, &o),
+            "exec" => exec::run_exec(now, &o),
             _ => run_dump(now, &o),
         };
         if let Err(e) = res {
@@ -93,7 +95,7 @@ fn main() {
             );
             exit(2);
         }
-        eprintln!("unknown scenario {which:?} (use: {order:?}, guardrail, flow, bench, dump, or all)");
+        eprintln!("unknown scenario {which:?} (use: {order:?}, guardrail, exec, flow, bench, dump, or all)");
         exit(2);
     };
 
@@ -121,9 +123,10 @@ pub(crate) fn header(title: &str) {
 /// command when a selector is passed as a scenario.
 fn looks_like_dump_selector(s: &str) -> bool {
     let s = s.trim_start_matches('-').to_lowercase();
-    const KEYS: [&str; 13] = [
-        "pca0", "pca1", "hop0", "hop1", "envelope", "policy", "scopes", "mle", "pdp", "trace",
-        "guard", "denytrace", "deny",
+    const KEYS: [&str; 19] = [
+        "pca0", "pca1", "hop0", "hop1", "envelope", "policy", "scopes", "origin", "mle",
+        "multilineage", "ml", "pdp", "trace", "outer", "guard", "accept", "receiver", "denytrace",
+        "deny",
     ];
     KEYS.iter()
         .any(|k| s == *k || (s.len() >= 3 && k.starts_with(&s)))
@@ -255,32 +258,47 @@ fn run_dump(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
     let mut guarded_res = None;
     if o.guardrail {
         let g = w.guarded(now)?;
+        let outer_ml = g.permit.outer_pca.as_ref().and_then(|p| p.multi_lineage.clone());
         items.push(DumpItem {
             key: "policy",
             aliases: &[],
-            title: "Guardrail policy (fixture, spec-shaped)".into(),
-            explanation: "The configured policy the PDP evaluates: an effect and an elementary CEL-like condition over the participants' semantic scopes. The decision defaults to deny.",
+            title: "Enforcement policy (fixture, spec-shaped)".into(),
+            explanation: "The configured policy the enforcement function evaluates: an effect and an elementary CEL-like condition over the carried lineages' semantic scopes. The decision defaults to deny.",
             value: to_value(&g.policy),
         });
         items.push(DumpItem {
             key: "scopes",
             aliases: &[],
             title: "Semantic-scope bindings (policy-controlled mapping)".into(),
-            explanation: "Scopes are bound to a Lineage Execution through its origin grantId (or origin issuer): origin-bound metadata the executor cannot self-assert. A scope adds no authority.",
+            explanation: "Scopes are bound to a carried lineage through its origin grantId (or origin issuer): origin-bound metadata the executor cannot self-assert. A scope adds no authority.",
             value: to_value(&g.scopes),
+        });
+        items.push(DumpItem {
+            key: "origin",
+            aliases: &["pca0g"],
+            title: "PCA0-G (outer ENFORCE lineage origin, signed by the authorized sandbox origin)".into(),
+            explanation: "The origin of the outer Sandboxed Execution lineage. It carries operations:[ENFORCE] and the guardrail execution contract, no PoR and no verdict. Minted by an authorized sandbox origin (did:web:enforcement.example).",
+            value: to_value(&g.origin),
         });
         items.push(DumpItem {
             key: "mle",
             aliases: &[],
-            title: "Multi-Lineage Execution (the runtime carrier)".into(),
-            explanation: "n >= 1 Lineage Executions carried together for one proposed transition. The proposed transition consists exclusively of the concrete signed requests carried by the participants; no authority of its own.",
+            title: "Multi-Lineage Execution (the input carrier)".into(),
+            explanation: "n >= 1 independent carried lineages proposed together for one transition. The proposed transition is exactly the concrete signed requests they carry; the carrier has no authority of its own.",
             value: to_value(&g.permit.mle),
+        });
+        items.push(DumpItem {
+            key: "multilineage",
+            aliases: &["ml", "carried"],
+            title: "multiLineage (the signed profile field carried by PCA1-G)".into(),
+            explanation: "The inner Multi-Lineage Execution as carried in the outer PCA's signed multiLineage field: carriedLineages (full chains) + crossing context. request.multiLineageDigest = H(\"PIC-Multi-Lineage-v0\" || canonical(multiLineage)) pins it.",
+            value: to_value(&outer_ml),
         });
         items.push(DumpItem {
             key: "pdp",
             aliases: &[],
-            title: "PDP exchange (request → decision)".into(),
-            explanation: "What the guardrail hands to the (simulated) PDP — participants with scopes and destination — and the decision that comes back. The guardrail enforces it; the PDP is one possible implementation of policy evaluation.",
+            title: "Enforcement function exchange (request → decision)".into(),
+            explanation: "What the guardrail hands to the (simulated) PDP — carried lineages with scopes and destination — and the decision that comes back. The guardrail enforces it; a PDP is one possible implementation.",
             value: serde_json::json!({
                 "request": g.permit.trace.pdp_request,
                 "decision": g.permit.trace.decision,
@@ -289,22 +307,29 @@ fn run_dump(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
         items.push(DumpItem {
             key: "trace",
             aliases: &[],
-            title: "Guardrail enforcement trace (validate → evaluate → enforce)".into(),
-            explanation: "What the guardrail did, in enforcement order: PCA validation per participant, the PDP call, and the enforced decision.",
+            title: "Guardrail enforcement trace (outer → carried → evaluate → prove)".into(),
+            explanation: "What the guardrail did, in phase order: outer-predecessor validation, carried-lineage validation, the enforcement-function call, and the produced outer PCA (on permit).",
             value: to_value(&g.permit.trace),
         });
         items.push(DumpItem {
-            key: "guard",
-            aliases: &["guardrail", "guard1"],
-            title: "Guardrail forwarding envelope (two proofs, never nested)".into(),
-            explanation: "The permitted crossing travels in this envelope. forwardingProof (sandbox) attributes the presentation; guardrailProof (guardrail DID) attests validation + policy + permit and covers the forwardingProofDigest. Neither replaces the executor signature on any PCA.",
-            value: to_value(&g.permit.envelope),
+            key: "outer",
+            aliases: &["guard", "pca1g", "chain"],
+            title: "Outer ENFORCE lineage [PCA0-G, PCA1-G] — PCA1-G is the guardrail decision".into(),
+            explanation: "The permitted crossing is carried by an ordinary outer PCA (PCA1-G) that continues PCA0-G under PoR. Its request.enforcementResult=permit and it carries the signed multiLineage. No envelope, no second signature.",
+            value: to_value(&g.permit.outer_chain),
+        });
+        items.push(DumpItem {
+            key: "accept",
+            aliases: &["receiver"],
+            title: "Enforced-acceptance checks (receiving hop)".into(),
+            explanation: "What a conforming receiving hop does: AcceptGuardedCrossing on the outer chain (valid outer PIC, authorized origin, ENFORCE, multiLineageDigest match, valid carried lineages, permit, fresh); a bypass (no outer PCA) and a tampered carried set are rejected.",
+            value: to_value(&g.receiver),
         });
         items.push(DumpItem {
             key: "denytrace",
             aliases: &["deny"],
             title: "Deny trace (A + C, external-sharing)".into(),
-            explanation: "The same pipeline denying: the PDP finds a participant whose scopes satisfy no policy alternative; the guardrail enforces deny and issues no envelope.",
+            explanation: "The same pipeline denying: the enforcement function finds a carried lineage whose scopes satisfy no policy alternative; the guardrail denies and produces no authorizing continuation.",
             value: to_value(&g.deny.trace),
         });
         guarded_res = Some(g);
@@ -410,7 +435,7 @@ fn run_dump(now: DateTime<Utc>, o: &Opts) -> Result<(), String> {
         "{}",
         paint(
             C_DIM,
-            "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail guard pdp"
+            "\nselect artifacts: picdemo dump hop1   |   picdemo dump --guardrail outer multilineage accept"
         )
     );
     Ok(())

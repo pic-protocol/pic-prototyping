@@ -36,25 +36,30 @@ guardrail/scopes.json            # semantic-scope bindings (grantId / origin iss
 | `summary-service` | `did:web:summary.example` | executor (agentic) — Lineage 1 |
 | `archive-service` | `did:web:archive.example` | executor (deterministic) |
 | `storage-service` | `did:web:storage.example` | executor (deterministic) |
-| `guardrail` | `did:web:guardrail.example` | Execution Guardrail (signs `guardrailProof`) |
-| `sandbox` | `did:web:sandbox.example` | sandbox / forwarder (signs `forwardingProof`) |
+| `enforcement-origin` | `did:web:enforcement.example` | authorized sandbox origin — mints `PCA0-G` (outer ENFORCE lineage) |
+| `guardrail` | `did:web:guardrail.example` | executor (deterministic) of the outer ENFORCE lineage |
 
 The executor attestations carry `role`, `compliance`, `executionModel`,
 `environment`, and `region`, signed by `org-authority` with a wide fixed
 validity window so they verify regardless of run date.
 
-## Execution Guardrail fixtures
+## Sandboxed Execution fixtures
 
-`guardrail/policy.json` mirrors the Execution Guardrail spec's illustrative
-policy: an `effect` and an elementary CEL-like `when` condition over the
-participants' semantic scopes; the decision defaults to deny. The simulated
-PDP in the prototypes evaluates exactly this file.
+`guardrail/policy.json` mirrors the PIC Sandboxed Execution spec's illustrative
+policy: an `effect` and an elementary CEL-like `when` condition over the carried
+lineages' semantic scopes; the decision defaults to deny. The simulated PDP in
+the prototypes (the enforcement function) evaluates exactly this file.
 
 `guardrail/scopes.json` is the policy-controlled mapping that binds semantic
-scopes to a Lineage Execution through its origin `grantId` (or origin issuer
-DID as a governance fallback). Scopes are origin-bound metadata the executor
-cannot self-assert, and a scope adds no authority — it only informs the
-guardrail policy decision.
+scopes to a carried lineage through its origin `grantId` (or origin issuer DID
+as a governance fallback). Scopes are origin-bound metadata the executor cannot
+self-assert, and a scope adds no authority — it only informs the enforcement
+decision.
+
+The guardrail is now an ordinary executor of an outer **ENFORCE** lineage whose
+origin (`PCA0-G`) is minted by the authorized `enforcement-origin`; the permitted
+crossing is carried by an ordinary outer PCA (`PCA1-G`) in its signed
+`multiLineage` field — no sandbox primitive, no envelope, no second signature.
 
 ## Determinism and regeneration
 

@@ -1,7 +1,0 @@
-{
-  "kty": "OKP",
-  "crv": "Ed25519",
-  "kid": "did:web:sandbox.example#key-1",
-  "x": "lvnbbKmwqg0UaPsoYEy8j_Oyv3DNhUJXlJdsq9Uu8uQ",
-  "d": "X45n3F1eghBTwjt_q4cJKyt-RuPwfApv4eJ32W-cCLE"
-}

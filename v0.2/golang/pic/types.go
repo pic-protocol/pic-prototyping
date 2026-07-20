@@ -68,12 +68,24 @@ type ContractAttributes struct {
 
 // Request is the request binding: it pins authority to the concrete action, so
 // enforcement can check executed-vs-signed (§2.3, §3.3 check 8).
+//
+// The last five fields are the Sandboxed Execution profile extension (PIC
+// Sandboxed Execution Specification §2.4): on an outer ENFORCE PCA the request
+// commits to the complete multiLineage and records the enforcement decision.
+// They are empty (omitted) on every ordinary PCA.
 type Request struct {
 	Operation      string `json:"operation"`
 	Target         string `json:"target"`
 	SecurityDomain string `json:"securityDomain"`
 	RequestDigest  string `json:"requestDigest,omitempty"`
 	PayloadDigest  string `json:"payloadDigest,omitempty"`
+
+	// Sandboxed Execution profile (outer ENFORCE PCA only).
+	MultiLineageDigest string `json:"multiLineageDigest,omitempty"`
+	PolicyCommitment   string `json:"policyCommitment,omitempty"`
+	InputsCommitment   string `json:"inputsCommitment,omitempty"`
+	SemanticProfile    string `json:"semanticProfile,omitempty"`
+	EnforcementResult  string `json:"enforcementResult,omitempty"` // "permit" | "deny"
 }
 
 // ContinuationResponse answers the predecessor's challenge with a fresh local
@@ -125,6 +137,11 @@ type PCA struct {
 
 	Invariants   Invariants   `json:"invariants"`
 	Continuation Continuation `json:"continuation"`
+
+	// MultiLineage is the signed Sandboxed Execution profile field carried by an
+	// outer ENFORCE PCA (§2.4): the inner Multi-Lineage Execution being governed.
+	// It is covered by the single PCA signature and is nil on every ordinary PCA.
+	MultiLineage *MultiLineage `json:"multiLineage,omitempty"`
 
 	IssuedAt  time.Time `json:"issuedAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
