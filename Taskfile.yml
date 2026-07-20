@@ -88,6 +88,60 @@ tasks:
     cmds:
           - go run ./cmd/genfixtures
     silent: true
+  v0-2-go-exec:
+    desc: 'Sandboxed Execution viewer (PIC of PIC). Pass args: -- A | -- outer | -- all --pca | -- --no-guardrail'
+    dir:  ./v0.2/golang
+    cmds:
+          - go run ./cmd/picdemo exec {{.CLI_ARGS}}
+    silent: true
+  v0-2-go-sandboxed:
+    desc: Showcase the new Sandboxed Execution (PIC of PIC) end to end — exec views + guardrail + artifacts, in series
+    dir:  ./v0.2/golang
+    silent: true
+    cmds:
+          - echo "==== 1  exec — compact Sandboxed Execution (outer ENFORCE lineage carrying A + B) ===="
+          - go run ./cmd/picdemo exec
+          - echo "==== 2  exec A — drill into one carried (inner) lineage ===="
+          - go run ./cmd/picdemo exec A
+          - echo "==== 3  exec outer — the outer ENFORCE lineage (PCA0-G, PCA1-G) ===="
+          - go run ./cmd/picdemo exec outer
+          - echo "==== 4  exec all --pca — every lineage, full signed PCAs (see multiLineage) ===="
+          - go run ./cmd/picdemo exec all --pca
+          - echo "==== 5  exec --no-guardrail — inner lineages only (debug) ===="
+          - go run ./cmd/picdemo exec --no-guardrail
+          - echo "==== 6  guardrail scenario — permit / deny / invalid carried lineage / enforced acceptance ===="
+          - go run ./cmd/picdemo guardrail
+          - echo "==== 7  dump --guardrail — real signed artifacts (outer PCA, multiLineage, accept checks) ===="
+          - go run ./cmd/picdemo dump --guardrail outer multilineage accept
+  v0-2-go-tour:
+    desc: Full guided tour of the PIC v0.2 Go prototype — every scenario, the flow, and the Sandboxed Execution, in series
+    dir:  ./v0.2/golang
+    silent: true
+    cmds:
+          - echo "########## 1  why-pic — authority mixing / cross-lineage composition ##########"
+          - go run ./cmd/picdemo why-pic
+          - echo "########## 2  confused-deputy — cross-service prevention ##########"
+          - go run ./cmd/picdemo confused-deputy
+          - echo "########## 3  snapshot — O(hops since snapshot) vs O(n) ##########"
+          - go run ./cmd/picdemo snapshot
+          - echo "########## 4  revocation — LINEAGE-SUFFIX causal cutoff ##########"
+          - go run ./cmd/picdemo revocation
+          - echo "########## 5  flow — authority narrowing hop by hop (+ rejected rogue) ##########"
+          - go run ./cmd/picdemo flow
+          - echo "########## 6  exec — Sandboxed Execution, compact (PIC carrying PIC) ##########"
+          - go run ./cmd/picdemo exec
+          - echo "########## 7  guardrail — the canonical Sandboxed Execution, full ##########"
+          - go run ./cmd/picdemo guardrail
+          - echo "########## 8  bench --guardrail — timings, decomposed per phase ##########"
+          - go run ./cmd/picdemo bench --guardrail
+  v0-2-go-check:
+    desc: Build, vet, and test the PIC v0.2 Go prototype (green check)
+    dir:  ./v0.2/golang
+    silent: true
+    cmds:
+          - go build ./...
+          - go vet ./...
+          - go test ./...
 
   # v0.2 — Rust prototype (Snapshot Hash Chain profile; shares v0.2/fixtures with Go)
 
@@ -133,3 +187,97 @@ tasks:
     cmds:
           - cargo run --bin genfixtures
     silent: true
+  v0-2-rust-exec:
+    desc: 'Sandboxed Execution viewer (PIC of PIC). Pass args: -- A | -- outer | -- all --pca | -- --no-guardrail'
+    dir:  ./v0.2/rust
+    cmds:
+          - cargo run -q --bin picdemo -- exec {{.CLI_ARGS}}
+    silent: true
+  v0-2-rust-sandboxed:
+    desc: Showcase the new Sandboxed Execution (PIC of PIC) end to end — exec views + guardrail + artifacts, in series
+    dir:  ./v0.2/rust
+    silent: true
+    cmds:
+          - echo "==== 1  exec — compact Sandboxed Execution (outer ENFORCE lineage carrying A + B) ===="
+          - cargo run -q --bin picdemo -- exec
+          - echo "==== 2  exec A — drill into one carried (inner) lineage ===="
+          - cargo run -q --bin picdemo -- exec A
+          - echo "==== 3  exec outer — the outer ENFORCE lineage (PCA0-G, PCA1-G) ===="
+          - cargo run -q --bin picdemo -- exec outer
+          - echo "==== 4  exec all --pca — every lineage, full signed PCAs (see multiLineage) ===="
+          - cargo run -q --bin picdemo -- exec all --pca
+          - echo "==== 5  exec --no-guardrail — inner lineages only (debug) ===="
+          - cargo run -q --bin picdemo -- exec --no-guardrail
+          - echo "==== 6  guardrail scenario — permit / deny / invalid carried lineage / enforced acceptance ===="
+          - cargo run -q --bin picdemo -- guardrail
+          - echo "==== 7  dump --guardrail — real signed artifacts (outer PCA, multiLineage, accept checks) ===="
+          - cargo run -q --bin picdemo -- dump --guardrail outer multilineage accept
+  v0-2-rust-tour:
+    desc: Full guided tour of the PIC v0.2 Rust prototype — every scenario, the flow, and the Sandboxed Execution, in series
+    dir:  ./v0.2/rust
+    silent: true
+    cmds:
+          - echo "########## 1  why-pic — authority mixing / cross-lineage composition ##########"
+          - cargo run -q --bin picdemo -- why-pic
+          - echo "########## 2  confused-deputy — cross-service prevention ##########"
+          - cargo run -q --bin picdemo -- confused-deputy
+          - echo "########## 3  snapshot — O(hops since snapshot) vs O(n) ##########"
+          - cargo run -q --bin picdemo -- snapshot
+          - echo "########## 4  revocation — LINEAGE-SUFFIX causal cutoff ##########"
+          - cargo run -q --bin picdemo -- revocation
+          - echo "########## 5  flow — authority narrowing hop by hop (+ rejected rogue) ##########"
+          - cargo run -q --bin picdemo -- flow
+          - echo "########## 6  exec — Sandboxed Execution, compact (PIC carrying PIC) ##########"
+          - cargo run -q --bin picdemo -- exec
+          - echo "########## 7  guardrail — the canonical Sandboxed Execution, full ##########"
+          - cargo run -q --bin picdemo -- guardrail
+          - echo "########## 8  bench --guardrail — timings, decomposed per phase ##########"
+          - cargo run -q --release --bin picdemo -- bench --guardrail
+  v0-2-rust-check:
+    desc: Build and test the PIC v0.2 Rust prototype (green check)
+    dir:  ./v0.2/rust
+    silent: true
+    cmds:
+          - cargo build
+          - cargo test
+
+  # v0.2 — combined (Go + Rust)
+
+  v0-2-sandboxed:
+    desc: Showcase the new Sandboxed Execution (PIC of PIC) in BOTH languages, in series
+    silent: true
+    cmds:
+          - echo "@@@@@@@@@@@@@@@@@@@@  GO  @@@@@@@@@@@@@@@@@@@@"
+          - task: v0-2-go-sandboxed
+          - echo "@@@@@@@@@@@@@@@@@@@@  RUST  @@@@@@@@@@@@@@@@@@@@"
+          - task: v0-2-rust-sandboxed
+  v0-2-check:
+    desc: Build + test BOTH v0.2 prototypes (Go and Rust), in series
+    silent: true
+    cmds:
+          - task: v0-2-go-check
+          - task: v0-2-rust-check
+  v0-2-parity:
+    desc: Cross-language JSON parity — the outer PCA (PCA1-G) + multiLineage key structure must be identical in Go and Rust
+    dir:  ./v0.2
+    silent: true
+    cmds:
+          - |
+            keys() { python3 -c 'import sys,json
+            d=json.load(sys.stdin); pca=d["outerChain"][1]
+            def paths(o,p=""):
+                out=[]
+                if isinstance(o,dict):
+                    for k in sorted(o): out+=paths(o[k],p+"/"+k)
+                elif isinstance(o,list):
+                    out+=(paths(o[0],p+"[]") if o else [p+"[]"])
+                else: out.append(p)
+                return out
+            print("\n".join(paths(pca)))'; }
+            (cd golang && go run ./cmd/picdemo exec --only-json) | keys > /tmp/pic-go-keys.txt
+            (cd rust && cargo run -q --bin picdemo -- exec --only-json) | keys > /tmp/pic-rs-keys.txt
+            if diff -u /tmp/pic-go-keys.txt /tmp/pic-rs-keys.txt; then
+              echo "IDENTICAL ✔  ($(wc -l < /tmp/pic-go-keys.txt | tr -d ' ') key paths in PCA1-G + multiLineage)"
+            else
+              echo "MISMATCH ✗"; exit 1
+            fi
